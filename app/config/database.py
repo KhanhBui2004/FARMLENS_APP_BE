@@ -1,6 +1,12 @@
 from pymongo.mongo_client import MongoClient
+from dotenv import load_dotenv
+import os
 
-client = MongoClient("REMOVED_KEY")
+load_dotenv()
+
+MONGO_URL = os.getenv("MONGO_URL")
+
+client = MongoClient(MONGO_URL)
 
 db = client.todo_db
 
