@@ -1,7 +1,8 @@
 from datetime import datetime
 
 import bcrypt
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from bson import ObjectId
 
 from app.models.users import RefreshRequest, UserCreate, UserLogin
@@ -23,13 +24,23 @@ def verify_password(password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
+def error_response(status_code: int, message: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "code": status_code,
+            "message": message
+        }
+    )
+
+
 @router.post("/register")
 async def register_user(user: UserCreate):
     existing_user = user_collection.find_one(
         {"$or": [{"username": user.username}, {"email": user.email}]}
     )
     if existing_user:
-        raise HTTPException(status_code=409, detail="Username or email already exists")
+        return error_response(409, "Username or email already exists")
 
     user_dict = user.dict()
     user_dict["password"] = hash_password(user.password)
@@ -49,10 +60,10 @@ async def login_user(login: UserLogin):
         {"$or": [{"username": login.identifier}, {"email": login.identifier}]}
     )
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        return error_response(401, "Invalid credentials")
 
     if not verify_password(login.password, user.get("password", "")):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        return error_response(401, "Invalid credentials")
 
     access_token = create_access_token(
         subject=str(user["_id"]),
@@ -77,23 +88,23 @@ async def refresh_token(payload: RefreshRequest):
         token_data = decode_token(payload.refresh_token)
     except Exception as error:
         if is_jwt_error(error):
-            raise HTTPException(status_code=401, detail="Invalid refresh token")
-        raise
+            return error_response(401, "Invalid refresh token")
+        return error_response(500, "Unexpected error")
 
     if token_data.get("token_type") != "refresh":
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        return error_response(401, "Invalid refresh token")
 
     user_id = token_data.get("sub")
     if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        return error_response(401, "Invalid refresh token")
 
     try:
         user = user_collection.find_one({"_id": ObjectId(user_id)})
     except Exception:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        return error_response(401, "Invalid refresh token")
 
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        return error_response(401, "Invalid refresh token")
 
     access_token = create_access_token(
         subject=str(user["_id"]),

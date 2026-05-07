@@ -45,7 +45,23 @@ JWT_SECRET=change_me
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=7
+GEE_SERVICE_ACCOUNT=your-service-account@your-project.iam.gserviceaccount.com
 ```
+
+## Google Earth Engine (GEE)
+
+Backend su dung GEE de lay anh Sentinel-2. Can set up Service Account va khoa JSON.
+
+1) Dang ky tai khoan GEE (neu chua co) va enable Earth Engine API trong Google Cloud.
+2) Tao Service Account trong Google Cloud, cap quyen, tai key JSON.
+3) Luu key JSON vao goc du an voi ten: `gee_key.json`.
+4) Cap nhat `.env` voi email Service Account:
+
+```env
+GEE_SERVICE_ACCOUNT=your-service-account@your-project.iam.gserviceaccount.com
+```
+
+Neu chua truy cap duoc GEE, chay lenh `earthengine authenticate` trong terminal de xac thuc tai khoan ca nhan.
 
 ## Run the server
 
