@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from app.models.sentinelAnalysis import SentinelAnalysisRequest, SentinelAnalysisResponse
 from app.schema import sentinel_serial
 from app.config.database import analysis_collection
-# from app.utils.imageSegmentation import _segment_image_from_url
+from app.utils.imageSegmentation import _segment_image_from_url
 
 
 # Khởi tạo Earth Engine
@@ -62,7 +62,7 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
             **vis_params
         })
         
-        # segmentation_base64 = _segment_image_from_url(thumb_url)
+        segmentation_base64 = _segment_image_from_url(thumb_url)
 
         response = SentinelAnalysisResponse(
             lat=payload_dict["lat"],
@@ -71,7 +71,7 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
             end_date=payload_dict["end_date"],
             cloud_cover=payload_dict["cloud_cover"],
             sentinel_image_url=thumb_url,
-            # segmentation_base64=segmentation_base64
+            segmentation_base64=segmentation_base64
         ).dict()
         response["created_at"] = datetime.utcnow()
         result = analysis_collection.insert_one(response)

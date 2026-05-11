@@ -6,3 +6,5 @@ __pycache__/
 gee_key.json
 
 unet_mobilenet_v2_smp_best.pth
+
+mask.py

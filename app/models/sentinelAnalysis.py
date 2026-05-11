@@ -16,4 +16,4 @@ class SentinelAnalysisResponse(BaseModel):
     end_date: str
     cloud_cover: float
     sentinel_image_url: str
-    # segmentation_base64: str
+    segmentation_base64: str
