@@ -19,3 +19,4 @@ db = client.farmlens_db
 
 user_collection = db["users"]
 analysis_collection = db["analysis_requests"]
+statistics_collection = db["statistics"]

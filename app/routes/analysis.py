@@ -1,14 +1,21 @@
 import os
 import ee 
+import numpy as np
 from datetime import datetime
 
-from PIL import Image
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from app.models.sentinelAnalysis import SentinelAnalysisRequest, SentinelAnalysisResponse
-from app.schema import sentinel_serial
-from app.config.database import analysis_collection
-from app.utils.imageSegmentation import _segment_image_from_url
+from bson import ObjectId
+from app.models.sentinelAnalysis import (
+    SentinelAnalysisRequest,
+    SentinelAnalysisResponse,
+    SegmentationStatisticsRequest,
+)
+from app.schema import sentinel_serial, statistic_serial
+from app.config.database import analysis_collection, statistics_collection
+from app.utils.loadModel import _segment_image_from_url
+from app.utils.segmentation import decode_segmentation_base64
+from app.utils.gee import get_pixel_area_m2
 
 
 # Khởi tạo Earth Engine
@@ -26,6 +33,27 @@ except Exception as e:
     raise Exception("Chưa xác thực GEE. Hãy chạy 'earthengine authenticate'")
 
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
+
+CLASS_LABELS = [
+    "agriculture",
+    "barren",
+    "forest",
+    "rangeland",
+    "unknown",
+    "urban",
+    "water",
+]
+
+CLASS_COLORS = [
+    [255, 255, 0],
+    [232, 184, 153],
+    [0, 255, 0],
+    [255, 0, 255],
+    [0, 0, 0],
+    [0, 255, 255],
+    [0, 0, 255],
+]
+
 
 @router.post("/fetch-sentinel-image/")
 def get_sentinel_image(payload: SentinelAnalysisRequest):
@@ -55,12 +83,15 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
 
         # 5. Tạo URL thumbnail
         # region_image = image.visualize(**vis_params) # Optional: visual
+        region = point.buffer(10000).bounds()
         thumb_url = image.getThumbURL({
             'dimensions': 1024,
-            'region': point.buffer(10000).bounds(), # 10km quanh điểm
+            'region': region, # 10km quanh điểm
             'format': 'png',
             **vis_params
         })
+
+        pixel_area_m2 = get_pixel_area_m2(image, region)
         
         segmentation_base64 = _segment_image_from_url(thumb_url)
 
@@ -71,7 +102,8 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
             end_date=payload_dict["end_date"],
             cloud_cover=payload_dict["cloud_cover"],
             sentinel_image_url=thumb_url,
-            segmentation_base64=segmentation_base64
+            segmentation_base64=segmentation_base64,
+            pixel_area_m2=pixel_area_m2,
         ).dict()
         response["created_at"] = datetime.utcnow()
         result = analysis_collection.insert_one(response)
@@ -84,6 +116,100 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
             "data": sentinel_serial(response)
         }
 
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "code": 500,
+                "message": str(e)
+            }
+        )
+    
+@router.post("/statistics/")
+def get_statistics(payload: SegmentationStatisticsRequest):
+    try:
+        segmentation_base64 = payload.segmentation_base64
+        pixel_area_m2 = payload.pixel_area_m2
+
+        if payload.analysis_id:
+            try:
+                analysis = analysis_collection.find_one({"_id": ObjectId(payload.analysis_id)})
+            except Exception:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "code": 400,
+                        "message": "Invalid analysis_id",
+                    },
+                )
+
+            if not analysis:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "code": 404,
+                        "message": "Analysis not found",
+                    },
+                )
+
+            segmentation_base64 = analysis.get("segmentation_base64")
+            pixel_area_m2 = analysis.get("pixel_area_m2")
+
+        if not segmentation_base64:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "code": 400,
+                    "message": "segmentation_base64 is required",
+                },
+            )
+
+        if not pixel_area_m2:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "code": 400,
+                    "message": "pixel_area_m2 is required",
+                },
+            )
+
+        image_array = decode_segmentation_base64(segmentation_base64)
+        height, width, _ = image_array.shape
+        total_pixels = height * width
+        pixel_area_km2 = float(pixel_area_m2) / 1_000_000.0
+
+        class_stats = {}
+        matched_pixels = 0
+        for label, color in zip(CLASS_LABELS, CLASS_COLORS):
+            color_array = np.array(color, dtype=np.uint8)
+            mask = np.all(image_array == color_array, axis=-1)
+            count = int(mask.sum())
+            matched_pixels += count
+            percentage = (count / total_pixels * 100.0) if total_pixels else 0.0
+            area_km2 = count * pixel_area_km2
+            class_stats[label] = {
+                "pixel_count": count,
+                "area_km2": round(area_km2, 6),
+                "percentage": round(percentage, 4),
+            }
+
+        unmatched = total_pixels - matched_pixels
+        statistics_doc = {
+            "analysis_id": payload.analysis_id,
+            "created_at": datetime.utcnow(),
+            "image_size": {"width": width, "height": height},
+            "total_pixels": total_pixels,
+            "unmatched_pixels": unmatched,
+            "pixel_area_m2": pixel_area_m2,
+            "classes": class_stats,
+        }
+        result = statistics_collection.insert_one(statistics_doc)
+        statistics_doc["_id"] = result.inserted_id
+        return {
+            "code": 200,
+            "message": "Statistics retrieved successfully",
+            "data": statistic_serial(statistics_doc)
+        }
     except Exception as e:
         return JSONResponse(
             status_code=500,
