@@ -14,7 +14,7 @@ from app.models.sentinelAnalysis import (
 from app.schema import sentinel_serial, statistic_serial
 from app.config.database import analysis_collection, statistics_collection
 from app.utils.loadModel import _segment_image_from_url
-from app.utils.segmentation import decode_segmentation_base64
+from app.utils.segmentation import _download_sentinel_image, decode_segmentation_url
 from app.utils.gee import get_pixel_area_m2
 
 
@@ -33,6 +33,7 @@ except Exception as e:
     raise Exception("Chưa xác thực GEE. Hãy chạy 'earthengine authenticate'")
 
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
+
 
 CLASS_LABELS = [
     "agriculture",
@@ -54,14 +55,13 @@ CLASS_COLORS = [
     [0, 0, 255],
 ]
 
-
-@router.post("/fetch-sentinel-image/")
+@router.post("/segmentation")
 def get_sentinel_image(payload: SentinelAnalysisRequest):
     try:
         payload_dict = payload.dict()
         
         # 1. Xác định khu vực (Point)
-        point = ee.Geometry.Point([payload_dict["lon"], payload_dict["lat"]])
+        point = ee.Geometry.Point([payload_dict["lng"], payload_dict["lat"]])
 
         # 2. Lọc bộ dữ liệu Sentinel-2
         collection = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
@@ -93,16 +93,17 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
 
         pixel_area_m2 = get_pixel_area_m2(image, region)
         
-        segmentation_base64 = _segment_image_from_url(thumb_url)
+        sentinel_local_url = _download_sentinel_image(thumb_url)
+        segmentation_url = _segment_image_from_url(thumb_url)
 
         response = SentinelAnalysisResponse(
             lat=payload_dict["lat"],
-            lon=payload_dict["lon"],
+            lng=payload_dict["lng"],
             start_date=payload_dict["start_date"],
             end_date=payload_dict["end_date"],
             cloud_cover=payload_dict["cloud_cover"],
-            sentinel_image_url=thumb_url,
-            segmentation_base64=segmentation_base64,
+            sentinel_url=sentinel_local_url,
+            segmentation_url=segmentation_url,
             pixel_area_m2=pixel_area_m2,
         ).dict()
         response["created_at"] = datetime.utcnow()
@@ -125,10 +126,10 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
             }
         )
     
-@router.post("/statistics/")
+@router.post("/statistics")
 def get_statistics(payload: SegmentationStatisticsRequest):
     try:
-        segmentation_base64 = payload.segmentation_base64
+        segmentation_url = payload.segmentation_url
         pixel_area_m2 = payload.pixel_area_m2
 
         if payload.analysis_id:
@@ -152,15 +153,15 @@ def get_statistics(payload: SegmentationStatisticsRequest):
                     },
                 )
 
-            segmentation_base64 = analysis.get("segmentation_base64")
+            segmentation_url = analysis.get("segmentation_url")
             pixel_area_m2 = analysis.get("pixel_area_m2")
 
-        if not segmentation_base64:
+        if not segmentation_url:
             return JSONResponse(
                 status_code=400,
                 content={
                     "code": 400,
-                    "message": "segmentation_base64 is required",
+                    "message": "segmentation_url is required",
                 },
             )
 
@@ -173,7 +174,7 @@ def get_statistics(payload: SegmentationStatisticsRequest):
                 },
             )
 
-        image_array = decode_segmentation_base64(segmentation_base64)
+        image_array = decode_segmentation_url(segmentation_url)
         height, width, _ = image_array.shape
         total_pixels = height * width
         pixel_area_km2 = float(pixel_area_m2) / 1_000_000.0

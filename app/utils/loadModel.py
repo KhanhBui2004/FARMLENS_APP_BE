@@ -1,18 +1,17 @@
 import io
-import base64
 import os
+import uuid
 from urllib.request import urlopen
 from PIL import Image
 import numpy as np
 import torch
 import segmentation_models_pytorch as smp
 
-
-
 # ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MODEL_PATH = ("unet_mobilenet_v2_smp_best.pth")
 MODEL_INPUT_SIZE = (512, 512)
 NUM_CLASSES = 7
+SEGMENTATIONS_DIR = "storage/segmentations"
 
 CLASS_COLORS = [
     [255, 255, 0],
@@ -23,7 +22,6 @@ CLASS_COLORS = [
     [0, 255, 255],
     [0, 0, 255],
 ]
-
 
 def _label_to_rgb(mask: np.ndarray) -> np.ndarray:
     height, width = mask.shape
@@ -87,6 +85,8 @@ def _segment_image_from_url(image_url: str) -> str:
     mask_rgb = _label_to_rgb(mask)
     mask_image = Image.fromarray(mask_rgb, mode="RGB")
     mask_image = mask_image.resize(original_size, resample=Image.NEAREST)
-    buffer = io.BytesIO()
-    mask_image.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode("utf-8")
+    os.makedirs(SEGMENTATIONS_DIR, exist_ok=True)
+    file_name = f"segmentation_{uuid.uuid4().hex}.png"
+    file_path = os.path.join(SEGMENTATIONS_DIR, file_name)
+    mask_image.save(file_path, format="PNG")
+    return f"{SEGMENTATIONS_DIR}/{file_name}"
