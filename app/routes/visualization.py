@@ -8,11 +8,9 @@ from bson import ObjectId
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from app.config.database import analysis_collection
-from app.models.visualization import OverlayRequest
+from app.config.database import analysis_collection, overlays_collection
+from app.models.visualization_model import OverlayRequest
 from app.utils.segmentation import decode_segmentation_url
-
-from app.config.database import overlays_collection
 
 
 router = APIRouter(prefix="/visualization", tags=["Visualization"])

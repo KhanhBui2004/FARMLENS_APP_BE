@@ -6,14 +6,14 @@ from datetime import datetime
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from bson import ObjectId
-from app.models.sentinelAnalysis import (
+from app.models.sentinel_analysis_model import (
     SentinelAnalysisRequest,
     SentinelAnalysisResponse,
     SegmentationStatisticsRequest,
 )
 from app.schema import sentinel_serial, statistic_serial
 from app.config.database import analysis_collection, statistics_collection
-from app.utils.loadModel import _segment_image_from_url
+from app.utils.load_model import _segment_image_from_url
 from app.utils.segmentation import _download_sentinel_image, decode_segmentation_url
 from app.utils.gee import get_pixel_area_m2
 
@@ -55,6 +55,16 @@ CLASS_COLORS = [
     [0, 0, 255],
 ]
 
+def mask_s2_clouds(image):
+    qa = image.select('QA60')
+    # Bit 10 là mây dày (Opaque clouds), Bit 11 là mây mù (Cirrus clouds)
+    cloud_bit_mask = 1 << 10
+    
+    # Chỉ mask mây dày, tạm thời bỏ qua mây mù để tránh bị trống ảnh
+    mask = qa.bitwiseAnd(cloud_bit_mask).eq(0)
+    
+    return image.updateMask(mask)
+
 @router.post("/segmentation")
 def get_sentinel_image(payload: SentinelAnalysisRequest):
     try:
@@ -64,14 +74,16 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
         point = ee.Geometry.Point([payload_dict["lng"], payload_dict["lat"]])
 
         # 2. Lọc bộ dữ liệu Sentinel-2
+        payload_dict["cloud_cover"] = max(payload_dict["cloud_cover"], 30.0)
         collection = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
                       .filterBounds(point)
                       .filterDate(payload_dict["start_date"], payload_dict["end_date"])
                       .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', payload_dict["cloud_cover"]))
+                      .map(mask_s2_clouds)
                       .sort('CLOUDY_PIXEL_PERCENTAGE'))
 
         # 3. Lấy ảnh tốt nhất
-        image = collection.median()
+        image = collection.median().unmask(collection.sort('CLOUDY_PIXEL_PERCENTAGE').first())
 
         # 4. Tham số hiển thị (Red, Green, Blue)
         vis_params = {

@@ -5,9 +5,9 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from bson import ObjectId
 
-from app.models.users import RefreshRequest, UserCreate, UserLogin
+from app.models.users_model import RefreshRequest, UserCreate, UserLogin
 from app.config.database import user_collection
-from app.schema.user import user_serial
+from app.schema.user_schema import user_serial
 from app.utils.jwt import (
     create_access_token,
     create_refresh_token,
