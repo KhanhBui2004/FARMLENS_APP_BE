@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlparse
 from urllib.request import urlopen
 
 import cv2
@@ -20,12 +21,27 @@ OVERLAYS_DIR = os.path.join("storage", "overlays")
 OVERLAYS_URL_PREFIX = "/storage/overlays"
 
 
+def _local_path_from_storage_url(path_value: str) -> str:
+	normalized = path_value.lstrip("/")
+	return os.path.abspath(os.path.join(os.getcwd(), normalized))
+
+
 def _decode_image_from_url(image_url: str) -> np.ndarray:
-	with urlopen(image_url) as response:
-		image_bytes = response.read()
-	image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-	image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-	return image
+	parsed = urlparse(image_url)
+	if parsed.scheme in {"http", "https"}:
+		if parsed.path.startswith("/storage/"):
+			local_path = _local_path_from_storage_url(parsed.path)
+			return cv2.imread(local_path, cv2.IMREAD_COLOR)
+		with urlopen(image_url) as response:
+			image_bytes = response.read()
+		image_array = np.frombuffer(image_bytes, dtype=np.uint8)
+		return cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+	if image_url.startswith("/storage/") or image_url.startswith("storage/"):
+		local_path = _local_path_from_storage_url(image_url)
+		return cv2.imread(local_path, cv2.IMREAD_COLOR)
+
+	return cv2.imread(image_url, cv2.IMREAD_COLOR)
 
 
 @router.post("/overlay")
@@ -51,7 +67,7 @@ def create_overlay(payload: OverlayRequest):
 				},
 			)
 
-		sentinel_url = analysis.get("sentinel_image_url")
+		sentinel_url = analysis.get("sentinel_url")
 		segmentation_url = analysis.get("segmentation_url")
 
 		if not sentinel_url or not segmentation_url:
@@ -59,7 +75,7 @@ def create_overlay(payload: OverlayRequest):
 				status_code=400,
 				content={
 					"code": 400,
-					"message": "sentinel_image_url and segmentation_url are required",
+					"message": "sentinel_url and segmentation_url are required",
 				},
 			)
 
