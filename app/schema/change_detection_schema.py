@@ -1,4 +1,4 @@
-def timeseries_serial(timeseries) -> dict:
+def change_detection_serial(timeseries) -> dict:
 	return {
 		"id": str(timeseries.get("_id")) if timeseries.get("_id") else None,
 		"lat": timeseries.get("lat"),

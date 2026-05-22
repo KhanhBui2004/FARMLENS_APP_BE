@@ -1,3 +1,4 @@
+import calendar
 import os
 import ee 
 import numpy as np
@@ -55,35 +56,41 @@ CLASS_COLORS = [
     [0, 0, 255],
 ]
 
-def mask_s2_clouds(image):
-    qa = image.select('QA60')
-    # Bit 10 là mây dày (Opaque clouds), Bit 11 là mây mù (Cirrus clouds)
-    cloud_bit_mask = 1 << 10
-    
-    # Chỉ mask mây dày, tạm thời bỏ qua mây mù để tránh bị trống ảnh
-    mask = qa.bitwiseAnd(cloud_bit_mask).eq(0)
-    
-    return image.updateMask(mask)
+def _get_month_range(date_str: str) -> tuple[str, str]:
+    parsed = datetime.strptime(date_str, "%Y-%m-%d").date()
+    end_date = parsed
+    start_month_index = (end_date.month - 1) - 6
+    start_year = end_date.year + (start_month_index // 12)
+    start_month = (start_month_index % 12) + 1
+    last_day = calendar.monthrange(start_year, start_month)[1]
+    start_day = min(end_date.day, last_day)
+    start_date = end_date.replace(
+        year=start_year,
+        month=start_month,
+        day=start_day,
+    )
+    return start_date.isoformat(), end_date.isoformat()
+
 
 @router.post("/segmentation")
 def get_sentinel_image(payload: SentinelAnalysisRequest):
     try:
         payload_dict = payload.dict()
+        start_date, end_date = _get_month_range(payload_dict["date"])
         
         # 1. Xác định khu vực (Point)
         point = ee.Geometry.Point([payload_dict["lng"], payload_dict["lat"]])
 
         # 2. Lọc bộ dữ liệu Sentinel-2
-        payload_dict["cloud_cover"] = max(payload_dict["cloud_cover"], 30.0)
         collection = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
                       .filterBounds(point)
-                      .filterDate(payload_dict["start_date"], payload_dict["end_date"])
+                    #   .filterDate(payload_dict["start_date"], payload_dict["end_date"])
+                      .filterDate(start_date, end_date)
                       .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', payload_dict["cloud_cover"]))
-                      .map(mask_s2_clouds)
                       .sort('CLOUDY_PIXEL_PERCENTAGE'))
 
         # 3. Lấy ảnh tốt nhất
-        image = collection.median().unmask(collection.sort('CLOUDY_PIXEL_PERCENTAGE').first())
+        image = collection.median()
 
         # 4. Tham số hiển thị (Red, Green, Blue)
         vis_params = {
@@ -111,8 +118,7 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
         response = SentinelAnalysisResponse(
             lat=payload_dict["lat"],
             lng=payload_dict["lng"],
-            start_date=payload_dict["start_date"],
-            end_date=payload_dict["end_date"],
+            date=start_date,
             cloud_cover=payload_dict["cloud_cover"],
             sentinel_url=sentinel_local_url,
             segmentation_url=segmentation_url,

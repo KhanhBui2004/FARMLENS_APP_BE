@@ -6,8 +6,8 @@ import numpy as np
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from app.models.change_detection_model import TimeSeriesRequest
-from app.schema.change_detection_schema import timeseries_serial
+from app.models.change_detection_model import ChangeDetectionRequest
+from app.schema.change_detection_schema import change_detection_serial
 from app.utils.gee import get_pixel_area_m2
 from app.utils.load_model import _segment_image_from_url
 from app.utils.segmentation import decode_segmentation_url
@@ -37,21 +37,10 @@ CLASS_COLORS = [
 	[0, 0, 255],
 ]
 
-def mask_s2_clouds(image):
-    qa = image.select('QA60')
-    # Bit 10 là mây dày (Opaque clouds), Bit 11 là mây mù (Cirrus clouds)
-    cloud_bit_mask = 1 << 10
-    
-    # Chỉ mask mây dày, tạm thời bỏ qua mây mù để tránh bị trống ảnh
-    mask = qa.bitwiseAnd(cloud_bit_mask).eq(0)
-    
-    return image.updateMask(mask)
-
-
 def _get_month_range(date_str: str) -> tuple[str, str]:
 	parsed = datetime.strptime(date_str, "%Y-%m-%d").date()
 	start_date = parsed.replace(day=1)
-	end_month_index = (start_date.month - 1) + 3
+	end_month_index = (start_date.month - 1) + 5
 	end_year = start_date.year + (end_month_index // 12)
 	end_month = (end_month_index % 12) + 1
 	last_day = calendar.monthrange(end_year, end_month)[1]
@@ -59,15 +48,15 @@ def _get_month_range(date_str: str) -> tuple[str, str]:
 	return start_date.isoformat(), end_date.isoformat()
 
 
-@router.post("/time-series")
-def time_series(payload: TimeSeriesRequest):
+@router.post("/change-detection")
+def change_detection(payload: ChangeDetectionRequest):
 	try:
-		if not payload.dates:
+		if not payload.date1 or not payload.date2:
 			return JSONResponse(
 				status_code=400,
 				content={
 					"code": 400,
-					"message": "dates is required",
+					"message": "date1 and date2 are required",
 				},
 			)
 
@@ -82,8 +71,9 @@ def time_series(payload: TimeSeriesRequest):
 				},
 			)
 
+		date_list = [payload.date1, payload.date2]
 		timeline = []
-		for date_str in payload.dates:
+		for date_str in date_list:
 			try:
 				start_date, end_date = _get_month_range(date_str)
 			except ValueError:
@@ -99,10 +89,9 @@ def time_series(payload: TimeSeriesRequest):
 						  .filterBounds(point)
 						  .filterDate(start_date, end_date)
 						  .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", payload.cloud_cover))
-						  .map(mask_s2_clouds)
 						  .sort("CLOUDY_PIXEL_PERCENTAGE"))
 
-			image = collection.median().unmask(collection.first())
+			image = collection.median()
 			
 			vis_params = {
 				"bands": ["B4", "B3", "B2"],
@@ -144,7 +133,7 @@ def time_series(payload: TimeSeriesRequest):
 		timeseries_doc = {
 			"lat": payload.lat,
 			"lng": payload.lng,
-			"dates": payload.dates,
+			"dates": date_list,
 			"cloud_cover": payload.cloud_cover,
 			"created_at": datetime.utcnow(),
 			"timeline": timeline,
@@ -154,8 +143,8 @@ def time_series(payload: TimeSeriesRequest):
 
 		return {
 			"code": 200,
-			"message": "Time series retrieved successfully",
-			"data": timeseries_serial(timeseries_doc),
+			"message": "Change detection results retrieved successfully",
+			"data": change_detection_serial(timeseries_doc),
 		}
 	except Exception as e:
 		return JSONResponse(
@@ -165,3 +154,4 @@ def time_series(payload: TimeSeriesRequest):
 				"message": str(e),
 			},
 		)
+

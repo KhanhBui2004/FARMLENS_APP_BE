@@ -89,4 +89,4 @@ def _segment_image_from_url(image_url: str) -> str:
     file_name = f"segmentation_{uuid.uuid4().hex}.png"
     file_path = os.path.join(SEGMENTATIONS_DIR, file_name)
     mask_image.save(file_path, format="PNG")
-    return f"{SEGMENTATIONS_DIR}/{file_name}"
+    return f"/{SEGMENTATIONS_DIR}/{file_name}"
