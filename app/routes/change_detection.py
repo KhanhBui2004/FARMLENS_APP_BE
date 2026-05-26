@@ -40,20 +40,23 @@ CLASS_COLORS = [
 ]
 
 def _get_month_range(date_str: str) -> tuple[str, str]:
-	parsed = datetime.strptime(date_str, "%Y-%m-%d").date()
-	start_date = parsed.replace(day=1)
-	end_month_index = (start_date.month - 1) + 5
-	end_year = start_date.year + (end_month_index // 12)
-	end_month = (end_month_index % 12) + 1
-	last_day = calendar.monthrange(end_year, end_month)[1]
-	end_date = start_date.replace(year=end_year, month=end_month, day=last_day)
-	return start_date.isoformat(), end_date.isoformat()
+    parsed = datetime.strptime(date_str, "%Y-%m-%d").date()
+    end_date = parsed
+    start_month_index = (end_date.month - 1) - 6
+    start_year = end_date.year + (start_month_index // 12)
+    start_month = (start_month_index % 12) + 1
+    last_day = calendar.monthrange(start_year, start_month)[1]
+    start_day = min(end_date.day, last_day)
+    start_date = end_date.replace(
+        year=start_year,
+        month=start_month,
+        day=start_day,
+    )
+    return start_date.isoformat(), end_date.isoformat()
 
 
 @router.get("/change-detection")
-def get_change_detection_history(
-	current_user: dict = Depends(get_current_user),
-):
+def get_change_detection_history(current_user: dict = Depends(get_current_user),):
 	try:
 		user_id = ObjectId(current_user["sub"])
 	except Exception:

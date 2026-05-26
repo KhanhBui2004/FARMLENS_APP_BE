@@ -44,28 +44,13 @@ def _decode_image_from_url(image_url: str) -> np.ndarray:
 
 
 @router.get("/overlay")
-def get_overlays(
-	current_user: dict = Depends(get_current_user),
-):
-	try:
-		user_id = ObjectId(current_user["sub"])
-	except Exception:
-		return JSONResponse(
-			status_code=401,
-			content={
-				"code": 401,
-				"message": "Invalid token",
-			},
-		)
+def get_overlays(analysis_id: str = None):
 
-	overlays = list(overlays_collection.find({"user_id": user_id}))
-	data = []
-	for item in overlays:
-		data.append({
-			"id": str(item.get("_id")) if item.get("_id") else None,
-			"analysis_id": item.get("analysis_id"),
-			"overlay_url": item.get("overlay_url"),
-		})
+	overlays = overlays_collection.find({"analysis_id": analysis_id}).first()
+	data = {
+			"analysis_id": overlays.get("analysis_id"),
+			"overlay_url": overlays.get("overlay_url"),
+			}
 
 	return {
 		"code": 200,

@@ -350,11 +350,10 @@ def get_statistics(
 @router.get("/statistics")
 def get_statistics_history(analysis_id: str):
 
-    statistics = list(
-        statistics_collection.find(
-            {"analysis_id": analysis_id}
-        )
-    )
+    statistics = statistics_collection.find(
+        {"analysis_id": analysis_id}
+    ).first()
+    
     if not statistics:
         return JSONResponse(
             status_code=404,
@@ -366,7 +365,7 @@ def get_statistics_history(analysis_id: str):
     return {
         "code": 200,
         "message": "Statistics retrieved successfully",
-        "data": [statistic_serial(item) for item in statistics],
+        "data": statistic_serial(statistics),
     }
 
 
