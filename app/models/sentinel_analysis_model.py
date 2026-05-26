@@ -21,5 +21,3 @@ class SentinelAnalysisResponse(BaseModel):
 
 class SegmentationStatisticsRequest(BaseModel):
     analysis_id: Optional[str] = None
-    segmentation_url: Optional[str] = None
-    pixel_area_m2: Optional[float] = None

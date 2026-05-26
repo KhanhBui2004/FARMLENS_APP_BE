@@ -3,7 +3,8 @@ from datetime import datetime
 
 import ee
 import numpy as np
-from fastapi import APIRouter
+from bson import ObjectId
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.models.change_detection_model import ChangeDetectionRequest
@@ -11,6 +12,7 @@ from app.schema.change_detection_schema import change_detection_serial
 from app.utils.gee import get_pixel_area_m2
 from app.utils.load_model import _segment_image_from_url
 from app.utils.segmentation import decode_segmentation_url
+from app.utils.jwt import get_current_user
 
 from app.config.database import timeseries_collection
 
@@ -48,8 +50,34 @@ def _get_month_range(date_str: str) -> tuple[str, str]:
 	return start_date.isoformat(), end_date.isoformat()
 
 
+@router.get("/change-detection")
+def get_change_detection_history(
+	current_user: dict = Depends(get_current_user),
+):
+	try:
+		user_id = ObjectId(current_user["sub"])
+	except Exception:
+		return JSONResponse(
+			status_code=401,
+			content={
+				"code": 401,
+				"message": "Invalid token",
+			},
+		)
+
+	timeseries = list(timeseries_collection.find({"user_id": user_id}))
+	return {
+		"code": 200,
+		"message": "Change detection history retrieved successfully",
+		"data": [change_detection_serial(item) for item in timeseries],
+	}
+
+
 @router.post("/change-detection")
-def change_detection(payload: ChangeDetectionRequest):
+def change_detection(
+	payload: ChangeDetectionRequest,
+	current_user: dict = Depends(get_current_user),
+):
 	try:
 		if not payload.date1 or not payload.date2:
 			return JSONResponse(
@@ -135,6 +163,7 @@ def change_detection(payload: ChangeDetectionRequest):
 			"lng": payload.lng,
 			"dates": date_list,
 			"cloud_cover": payload.cloud_cover,
+			"user_id": ObjectId(current_user["sub"]),
 			"created_at": datetime.utcnow(),
 			"timeline": timeline,
 		}
@@ -154,4 +183,81 @@ def change_detection(payload: ChangeDetectionRequest):
 				"message": str(e),
 			},
 		)
+
+
+@router.delete("/change-detection")
+def delete_change_detection_by_user(
+	current_user: dict = Depends(get_current_user),
+):
+	try:
+		user_id = ObjectId(current_user["sub"])
+	except Exception:
+		return JSONResponse(
+			status_code=401,
+			content={
+				"code": 401,
+				"message": "Invalid token",
+			},
+		)
+
+	result = timeseries_collection.delete_many({"user_id": user_id})
+	if result.deleted_count == 0:
+		return JSONResponse(
+			status_code=404,
+			content={
+				"code": 404,
+				"message": "No change detection records found",
+			},
+		)
+
+	return {
+		"code": 200,
+		"message": "All change detection records deleted successfully",
+		"deleted": result.deleted_count,
+	}
+
+
+@router.delete("/change-detection/{change_detection_id}")
+def delete_change_detection_by_id(
+	change_detection_id: str,
+	current_user: dict = Depends(get_current_user),
+):
+	try:
+		user_id = ObjectId(current_user["sub"])
+	except Exception:
+		return JSONResponse(
+			status_code=401,
+			content={
+				"code": 401,
+				"message": "Invalid token",
+			},
+		)
+
+	try:
+		change_detection_object_id = ObjectId(change_detection_id)
+	except Exception:
+		return JSONResponse(
+			status_code=400,
+			content={
+				"code": 400,
+				"message": "Invalid change_detection_id",
+			},
+		)
+
+	result = timeseries_collection.delete_one(
+		{"_id": change_detection_object_id, "user_id": user_id}
+	)
+	if result.deleted_count == 0:
+		return JSONResponse(
+			status_code=404,
+			content={
+				"code": 404,
+				"message": "Change detection not found",
+			},
+		)
+
+	return {
+		"code": 200,
+		"message": "Change detection deleted successfully",
+	}
 

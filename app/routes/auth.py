@@ -1,21 +1,32 @@
+import os
 from datetime import datetime
+from urllib.parse import urlencode
 
 import bcrypt
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from bson import ObjectId
 
-from app.models.users_model import RefreshRequest, UserCreate, UserLogin
+from app.models.users_model import (
+    ForgotPasswordRequest,
+    RefreshRequest,
+    ResetPasswordRequest,
+    UserCreate,
+    UserLogin
+)
 from app.config.database import user_collection
 from app.schema.user_schema import user_serial
 from app.utils.jwt import (
     create_access_token,
+    create_password_reset_token,
     create_refresh_token,
     decode_token,
     is_jwt_error
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+RESET_PASSWORD_URL = os.getenv("RESET_PASSWORD_URL", "http://localhost:3000/reset-password")
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -119,4 +130,65 @@ async def refresh_token(payload: RefreshRequest):
         "access_token": access_token,
         "refresh_token": new_refresh_token,
         "token_type": "bearer"
+    }
+
+
+@router.post("/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest):
+    user = user_collection.find_one({"email": payload.email})
+    if not user:
+        return {
+            "code": 200,
+            "message": "If the email exists, a reset link has been sent."
+        }
+
+    reset_token = create_password_reset_token(
+        subject=str(user["_id"]),
+        email=user.get("email", "")
+    )
+    reset_link = f"{RESET_PASSWORD_URL}?{urlencode({'token': reset_token})}"
+
+    return {
+        "code": 200,
+        "message": "Reset link generated successfully",
+        "data": {
+            "reset_link": reset_link,
+            "reset_token": reset_token
+        }
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(payload: ResetPasswordRequest):
+    try:
+        token_data = decode_token(payload.token)
+    except Exception as error:
+        if is_jwt_error(error):
+            return error_response(401, "Invalid reset token")
+        return error_response(500, "Unexpected error")
+
+    if token_data.get("token_type") != "password_reset":
+        return error_response(401, "Invalid reset token")
+
+    user_id = token_data.get("sub")
+    if not user_id:
+        return error_response(401, "Invalid reset token")
+
+    try:
+        user = user_collection.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        return error_response(401, "Invalid reset token")
+
+    if not user:
+        return error_response(404, "User not found")
+
+    hashed_password = hash_password(payload.new_password)
+    user_collection.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password": hashed_password, "updated_at": datetime.utcnow()}},
+    )
+
+    return {
+        "code": 200,
+        "message": "Password reset successfully"
     }

@@ -4,8 +4,6 @@ def sentinel_serial(analysis) -> dict:
         "created_at": analysis.get("created_at"),
         "lat": analysis.get("lat"),
         "lng": analysis.get("lng"),
-        # "start_date": analysis.get("start_date"),
-        # "end_date": analysis.get("end_date"),
         "date": analysis.get("date"),
         "cloud_cover": analysis.get("cloud_cover"),
         "pixel_area_m2": analysis.get("pixel_area_m2"),

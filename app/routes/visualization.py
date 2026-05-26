@@ -5,12 +5,13 @@ from urllib.request import urlopen
 import cv2
 import numpy as np
 from bson import ObjectId
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.config.database import analysis_collection, overlays_collection
 from app.models.visualization_model import OverlayRequest
 from app.utils.segmentation import decode_segmentation_url
+from app.utils.jwt import get_current_user
 
 
 router = APIRouter(prefix="/visualization", tags=["Visualization"])
@@ -42,8 +43,42 @@ def _decode_image_from_url(image_url: str) -> np.ndarray:
 	return cv2.imread(image_url, cv2.IMREAD_COLOR)
 
 
+@router.get("/overlay")
+def get_overlays(
+	current_user: dict = Depends(get_current_user),
+):
+	try:
+		user_id = ObjectId(current_user["sub"])
+	except Exception:
+		return JSONResponse(
+			status_code=401,
+			content={
+				"code": 401,
+				"message": "Invalid token",
+			},
+		)
+
+	overlays = list(overlays_collection.find({"user_id": user_id}))
+	data = []
+	for item in overlays:
+		data.append({
+			"id": str(item.get("_id")) if item.get("_id") else None,
+			"analysis_id": item.get("analysis_id"),
+			"overlay_url": item.get("overlay_url"),
+		})
+
+	return {
+		"code": 200,
+		"message": "Overlays retrieved successfully",
+		"data": data,
+	}
+
+
 @router.post("/overlay")
-def create_overlay(payload: OverlayRequest):
+def create_overlay(
+	payload: OverlayRequest,
+	current_user: dict = Depends(get_current_user),
+):
 	try:
 		try:
 			analysis = analysis_collection.find_one({"_id": ObjectId(payload.analysis_id)})
@@ -101,6 +136,7 @@ def create_overlay(payload: OverlayRequest):
 		overlays_collection.insert_one({
 			"analysis_id": payload.analysis_id,
 			"overlay_url": f"{OVERLAYS_URL_PREFIX}/{file_name}",
+			"user_id": ObjectId(current_user["sub"]),
 		})
 
 		return {
@@ -119,3 +155,70 @@ def create_overlay(payload: OverlayRequest):
 				"message": str(e),
 			},
 		)
+
+
+@router.delete("/overlay")
+def delete_overlays_by_user(
+	current_user: dict = Depends(get_current_user),
+):
+	try:
+		user_id = ObjectId(current_user["sub"])
+	except Exception:
+		return JSONResponse(
+			status_code=401,
+			content={
+				"code": 401,
+				"message": "Invalid token",
+			},
+		)
+
+	result = overlays_collection.delete_many({"user_id": user_id})
+	if result.deleted_count == 0:
+		return JSONResponse(
+			status_code=404,
+			content={
+				"code": 404,
+				"message": "No overlays found",
+			},
+		)
+
+	return {
+		"code": 200,
+		"message": "All overlays deleted successfully",
+		"deleted": result.deleted_count,
+	}
+
+
+@router.delete("/overlay/{analysis_id}")
+def delete_overlays_by_analysis(
+	analysis_id: str,
+	current_user: dict = Depends(get_current_user),
+):
+	try:
+		user_id = ObjectId(current_user["sub"])
+	except Exception:
+		return JSONResponse(
+			status_code=401,
+			content={
+				"code": 401,
+				"message": "Invalid token",
+			},
+		)
+
+	result = overlays_collection.delete_many(
+		{"analysis_id": analysis_id, "user_id": user_id}
+	)
+	if result.deleted_count == 0:
+		return JSONResponse(
+			status_code=404,
+			content={
+				"code": 404,
+				"message": "Overlay not found",
+			},
+		)
+
+	return {
+		"code": 200,
+		"message": "Overlay deleted successfully",
+		"deleted": result.deleted_count,
+	}

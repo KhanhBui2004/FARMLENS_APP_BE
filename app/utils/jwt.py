@@ -18,15 +18,16 @@ def _get_int_env(name: str, default: int) -> int:
 
 JWT_SECRET = os.getenv("JWT_SECRET", "CHANGE_ME")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = _get_int_env("ACCESS_TOKEN_EXPIRE_MINUTES", 30)
-REFRESH_TOKEN_EXPIRE_DAYS = _get_int_env("REFRESH_TOKEN_EXPIRE_DAYS", 7)
+ACCESS_TOKEN_EXPIRE_DAYS = 1
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+RESET_TOKEN_EXPIRE_MINUTES = 30
 
 security = HTTPBearer()
 
 
 def create_access_token(subject: str, username: str, email: str) -> str:
     now = datetime.utcnow()
-    expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = now + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     payload = {
         "sub": subject,
         "username": username,
@@ -44,6 +45,19 @@ def create_refresh_token(subject: str) -> str:
     payload = {
         "sub": subject,
         "token_type": "refresh",
+        "iat": now,
+        "exp": expire
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def create_password_reset_token(subject: str, email: str) -> str:
+    now = datetime.utcnow()
+    expire = now + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+    payload = {
+        "sub": subject,
+        "email": email,
+        "token_type": "password_reset",
         "iat": now,
         "exp": expire
     }

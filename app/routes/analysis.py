@@ -4,7 +4,7 @@ import ee
 import numpy as np
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from bson import ObjectId
 from app.models.sentinel_analysis_model import (
@@ -17,6 +17,7 @@ from app.config.database import analysis_collection, statistics_collection
 from app.utils.load_model import _segment_image_from_url
 from app.utils.segmentation import _download_sentinel_image, decode_segmentation_url
 from app.utils.gee import get_pixel_area_m2
+from app.utils.jwt import get_current_user
 
 
 # Khởi tạo Earth Engine
@@ -72,8 +73,34 @@ def _get_month_range(date_str: str) -> tuple[str, str]:
     return start_date.isoformat(), end_date.isoformat()
 
 
+@router.get("/segmentation")
+def get_segmentation_history(
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        user_id = ObjectId(current_user["sub"])
+    except Exception:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "code": 401,
+                "message": "Invalid token",
+            },
+        )
+
+    analyses = list(analysis_collection.find({"user_id": user_id}))
+    return {
+        "code": 200,
+        "message": "Segmentation history retrieved successfully",
+        "data": [sentinel_serial(item) for item in analyses],
+    }
+
+
 @router.post("/segmentation")
-def get_sentinel_image(payload: SentinelAnalysisRequest):
+def get_sentinel_image(
+    payload: SentinelAnalysisRequest,
+    current_user: dict = Depends(get_current_user),
+):
     try:
         payload_dict = payload.dict()
         start_date, end_date = _get_month_range(payload_dict["date"])
@@ -125,6 +152,7 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
             pixel_area_m2=pixel_area_m2,
         ).dict()
         response["created_at"] = datetime.utcnow()
+        response["user_id"] = ObjectId(current_user["sub"])
         result = analysis_collection.insert_one(response)
         response["_id"] = result.inserted_id
 
@@ -143,52 +171,132 @@ def get_sentinel_image(payload: SentinelAnalysisRequest):
                 "message": str(e)
             }
         )
+
+@router.delete("/segmentation/{analysis_id}")
+def delete_segmentation(
+    analysis_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        user_id = ObjectId(current_user["sub"])
+    except Exception:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "code": 401,
+                "message": "Invalid token",
+            },
+        )
+
+    try:
+        analysis_object_id = ObjectId(analysis_id)
+    except Exception:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "code": 400,
+                "message": "Invalid analysis_id",
+            },
+        )
+
+    result = analysis_collection.delete_one(
+        {"_id": analysis_object_id, "user_id": user_id}
+    )
+    if result.deleted_count == 0:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "code": 404,
+                "message": "Segmentation not found",
+            },
+        )
+
+    return {
+        "code": 200,
+        "message": "Segmentation deleted successfully",
+    }
+
+
+@router.delete("/segmentation")
+def delete_all_segmentations(
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        user_id = ObjectId(current_user["sub"])
+    except Exception:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "code": 401,
+                "message": "Invalid token",
+            },
+        )
+
+    result = analysis_collection.delete_many({"user_id": user_id})
+    if result.deleted_count == 0:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "code": 404,
+                "message": "No segmentations found",
+            },
+        )
+
+    return {
+        "code": 200,
+        "message": "All segmentations deleted successfully",
+        "deleted": result.deleted_count,
+    }
     
 @router.post("/statistics")
-def get_statistics(payload: SegmentationStatisticsRequest):
+def get_statistics(
+    payload: SegmentationStatisticsRequest,
+    current_user: dict = Depends(get_current_user),
+):
     try:
-        segmentation_url = payload.segmentation_url
-        pixel_area_m2 = payload.pixel_area_m2
-
-        if payload.analysis_id:
-            try:
-                analysis = analysis_collection.find_one({"_id": ObjectId(payload.analysis_id)})
-            except Exception:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "code": 400,
-                        "message": "Invalid analysis_id",
-                    },
-                )
-
-            if not analysis:
-                return JSONResponse(
-                    status_code=404,
-                    content={
-                        "code": 404,
-                        "message": "Analysis not found",
-                    },
-                )
-
-            segmentation_url = analysis.get("segmentation_url")
-            pixel_area_m2 = analysis.get("pixel_area_m2")
-
-        if not segmentation_url:
+        if not payload.analysis_id:
             return JSONResponse(
                 status_code=400,
                 content={
                     "code": 400,
-                    "message": "segmentation_url is required",
+                    "message": "analysis_id is required",
                 },
             )
 
-        if not pixel_area_m2:
+        try:
+            analysis = analysis_collection.find_one(
+                {
+                    "_id": ObjectId(payload.analysis_id),
+                    "user_id": ObjectId(current_user["sub"]),
+                }
+            )
+        except Exception:
             return JSONResponse(
                 status_code=400,
                 content={
                     "code": 400,
-                    "message": "pixel_area_m2 is required",
+                    "message": "Invalid analysis_id",
+                },
+            )
+
+        if not analysis:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "code": 404,
+                    "message": "Analysis not found",
+                },
+            )
+
+        segmentation_url = analysis.get("segmentation_url")
+        pixel_area_m2 = analysis.get("pixel_area_m2")
+
+        if not segmentation_url or not pixel_area_m2:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "code": 400,
+                    "message": "Analysis is missing segmentation data",
                 },
             )
 
@@ -215,6 +323,7 @@ def get_statistics(payload: SegmentationStatisticsRequest):
         unmatched = total_pixels - matched_pixels
         statistics_doc = {
             "analysis_id": payload.analysis_id,
+            "user_id": ObjectId(current_user["sub"]),
             "created_at": datetime.utcnow(),
             "image_size": {"width": width, "height": height},
             "total_pixels": total_pixels,
@@ -237,3 +346,78 @@ def get_statistics(payload: SegmentationStatisticsRequest):
                 "message": str(e)
             }
         )
+    
+@router.get("/statistics")
+def get_statistics_history(analysis_id: str):
+
+    statistics = list(
+        statistics_collection.find(
+            {"analysis_id": analysis_id}
+        )
+    )
+    if not statistics:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "code": 404,
+                "message": "Statistics not found",
+            },
+        )
+    return {
+        "code": 200,
+        "message": "Statistics retrieved successfully",
+        "data": [statistic_serial(item) for item in statistics],
+    }
+
+
+@router.delete("/statistics/{analysis_id}")
+def delete_statistics(analysis_id: str):
+
+    result = statistics_collection.delete_many(
+        {"analysis_id": analysis_id}
+    )
+    if result.deleted_count == 0:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "code": 404,
+                "message": "Statistics not found",
+            },
+        )
+
+    return {
+        "code": 200,
+        "message": "Statistics deleted successfully",
+    }
+
+
+@router.delete("/statistics")
+def delete_all_statistics(
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        user_id = ObjectId(current_user["sub"])
+    except Exception:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "code": 401,
+                "message": "Invalid token",
+            },
+        )
+
+    result = statistics_collection.delete_many({"user_id": user_id})
+    if result.deleted_count == 0:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "code": 404,
+                "message": "No statistics found",
+            },
+        )
+
+    return {
+        "code": 200,
+        "message": "All statistics deleted successfully",
+        "deleted": result.deleted_count,
+    }
