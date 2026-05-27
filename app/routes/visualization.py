@@ -46,7 +46,7 @@ def _decode_image_from_url(image_url: str) -> np.ndarray:
 @router.get("/overlay")
 def get_overlays(analysis_id: str = None):
 
-	overlays = overlays_collection.find({"analysis_id": analysis_id}).first()
+	overlays = overlays_collection.find_one({"analysis_id": analysis_id})
 	data = {
 			"analysis_id": overlays.get("analysis_id"),
 			"overlay_url": overlays.get("overlay_url"),

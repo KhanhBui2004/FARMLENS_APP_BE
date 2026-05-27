@@ -111,7 +111,6 @@ def get_sentinel_image(
         # 2. Lọc bộ dữ liệu Sentinel-2
         collection = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
                       .filterBounds(point)
-                    #   .filterDate(payload_dict["start_date"], payload_dict["end_date"])
                       .filterDate(start_date, end_date)
                       .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', payload_dict["cloud_cover"]))
                       .sort('CLOUDY_PIXEL_PERCENTAGE'))
@@ -129,7 +128,7 @@ def get_sentinel_image(
 
         # 5. Tạo URL thumbnail
         # region_image = image.visualize(**vis_params) # Optional: visual
-        region = point.buffer(10000).bounds()
+        region = point.buffer(3000).bounds()
         thumb_url = image.getThumbURL({
             'dimensions': 1024,
             'region': region, # 10km quanh điểm
@@ -350,9 +349,9 @@ def get_statistics(
 @router.get("/statistics")
 def get_statistics_history(analysis_id: str):
 
-    statistics = statistics_collection.find(
+    statistics = statistics_collection.find_one(
         {"analysis_id": analysis_id}
-    ).first()
+    )
     
     if not statistics:
         return JSONResponse(
