@@ -101,8 +101,13 @@ def change_detection(
 					"message": "Invalid coordinates",
 				},
 			)
-
 		date_list = [payload.date1, payload.date2]
+		date1 = datetime.strptime(payload.date1, "%Y-%m-%d")
+		date2 = datetime.strptime(payload.date2, "%Y-%m-%d")
+
+		if date1 > date2:
+			date_list = [payload.date2, payload.date1]
+		
 		timeline = []
 		for date_str in date_list:
 			try:
@@ -157,7 +162,7 @@ def change_detection(
 				}
 
 			timeline.append({
-				"date": start_date,
+				"date": end_date,
 				"classes": class_stats,
 			})
 

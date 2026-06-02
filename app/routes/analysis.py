@@ -144,7 +144,7 @@ def get_sentinel_image(
         response = SentinelAnalysisResponse(
             lat=payload_dict["lat"],
             lng=payload_dict["lng"],
-            date=start_date,
+            date=end_date,
             cloud_cover=payload_dict["cloud_cover"],
             sentinel_url=sentinel_local_url,
             segmentation_url=segmentation_url,

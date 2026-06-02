@@ -18,7 +18,6 @@ except Exception as e:
 db = client.farmlens_db
 
 user_collection = db["users"]
-analysis_collection = db["analysis_requests"]
+analysis_collection = db["analysis"]
 statistics_collection = db["statistics"]
-overlays_collection = db["overlays"]
-timeseries_collection = db["timeseries"]
+timeseries_collection = db["comparison_timeseries"]
