@@ -17,6 +17,7 @@ class SentinelAnalysisResponse(BaseModel):
     sentinel_url: str
     segmentation_url: str
     pixel_area_m2: Optional[float] = None
+    region_area_m2: Optional[float] = None
 
 
 class SegmentationStatisticsRequest(BaseModel):

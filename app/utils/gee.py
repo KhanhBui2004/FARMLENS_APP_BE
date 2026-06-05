@@ -1,13 +1,24 @@
 import ee
 
 
-def get_pixel_area_m2(image: ee.Image, region: ee.Geometry, scale: int = 10) -> float:
-    pixel_area = ee.Image.pixelArea()
-    stats = pixel_area.reduceRegion(
-        reducer=ee.Reducer.mean(),
-        geometry=region,
-        scale=scale,
-        maxPixels=1e9,
-        bestEffort=True,
+def get_region_area_m2(region: ee.Geometry) -> float:
+    """
+    Tính tổng diện tích thực tế của vùng (m²)
+    """
+    return float(
+        region.area(maxError=1).getInfo()
     )
-    return float(stats.get("area").getInfo())
+
+
+def get_pixel_area_m2(
+    region: ee.Geometry,
+    image_width: int,
+    image_height: int,
+) -> float:
+    """
+    Tính diện tích tương ứng của 1 pixel trên ảnh thumbnail
+    """
+    total_pixels = image_width * image_height
+    region_area_m2 = get_region_area_m2(region)
+
+    return region_area_m2 / total_pixels

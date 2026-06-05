@@ -6,7 +6,7 @@ def sentinel_serial(analysis) -> dict:
         "lng": analysis.get("lng"),
         "date": analysis.get("date"),
         "cloud_cover": analysis.get("cloud_cover"),
-        "pixel_area_m2": analysis.get("pixel_area_m2"),
+        "region_area_m2": analysis.get("region_area_m2"),
         "sentinel_url": analysis.get("sentinel_url"),
         "segmentation_url": analysis.get("segmentation_url"),
     }
@@ -24,6 +24,7 @@ def statistic_serial(statistics) -> dict:
         "image_size": statistics.get("image_size"),
         "total_pixels": statistics.get("total_pixels"),
         "unmatched_pixels": statistics.get("unmatched_pixels"),
+        "region_area_m2": statistics.get("region_area_m2"),
         "pixel_area_m2": statistics.get("pixel_area_m2"),
         "classes": statistics.get("classes"),
     }

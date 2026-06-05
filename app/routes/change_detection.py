@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.models.change_detection_model import ChangeDetectionRequest
 from app.schema.change_detection_schema import change_detection_serial
-from app.utils.gee import get_pixel_area_m2
+from app.utils.gee import get_region_area_m2
 from app.utils.load_model import _segment_image_from_url
 from app.utils.segmentation import decode_segmentation_url
 from app.utils.jwt import get_current_user
@@ -136,7 +136,7 @@ def change_detection(
 				"gamma": 1.4,
 			}
 
-			region = point.buffer(10000).bounds()
+			region = point.buffer(2000).bounds()
 			thumb_url = image.getThumbURL({
 				"dimensions": 1024,
 				"region": region,
@@ -144,11 +144,23 @@ def change_detection(
 				**vis_params,
 			})
 
-			pixel_area_m2 = get_pixel_area_m2(image, region)
+			region_area_m2 = get_region_area_m2(region)
 			segmentation_url = _segment_image_from_url(thumb_url)
 			image_array = decode_segmentation_url(segmentation_url)
 
 			height, width, _ = image_array.shape
+			total_pixels = height * width
+
+			if total_pixels == 0:
+				return JSONResponse(
+        			status_code=500,
+        			content={
+            		"code": 500,
+            		"message": "Segmentation image has no pixels",
+        			},
+    			)
+
+			pixel_area_m2 = region_area_m2 / total_pixels
 			pixel_area_km2 = float(pixel_area_m2) / 1_000_000.0
 
 			class_stats = {}
@@ -157,13 +169,25 @@ def change_detection(
 				mask = np.all(image_array == color_array, axis=-1)
 				count = int(mask.sum())
 				area_km2 = count * pixel_area_km2
+
+				percentage = (count / total_pixels * 100.0) if total_pixels else 0.0
+
 				class_stats[label] = {
+					"pixel_count": count,
 					"area_km2": round(area_km2, 6),
+					"percentage": round(percentage, 4),
 				}
 
 			timeline.append({
 				"date": end_date,
-				"classes": class_stats,
+    			"image_size": {
+        			"width": width,
+        			"height": height,
+    			},
+    			"total_pixels": total_pixels,
+    			"region_area_m2": region_area_m2,
+    			"pixel_area_m2": pixel_area_m2,
+    			"classes": class_stats,
 			})
 
 		timeseries_doc = {

@@ -16,7 +16,7 @@ from app.schema import sentinel_serial, statistic_serial
 from app.config.database import analysis_collection, statistics_collection
 from app.utils.load_model import _segment_image_from_url
 from app.utils.segmentation import _download_sentinel_image, decode_segmentation_url
-from app.utils.gee import get_pixel_area_m2
+from app.utils.gee import get_pixel_area_m2, get_region_area_m2
 from app.utils.jwt import get_current_user
 
 
@@ -128,7 +128,7 @@ def get_sentinel_image(
 
         # 5. Tạo URL thumbnail
         # region_image = image.visualize(**vis_params) # Optional: visual
-        region = point.buffer(3000).bounds()
+        region = point.buffer(2000).bounds()
         thumb_url = image.getThumbURL({
             'dimensions': 1024,
             'region': region, # 10km quanh điểm
@@ -136,7 +136,7 @@ def get_sentinel_image(
             **vis_params
         })
 
-        pixel_area_m2 = get_pixel_area_m2(image, region)
+        region_area_m2 = get_region_area_m2(region)
         
         sentinel_local_url = _download_sentinel_image(thumb_url)
         segmentation_url = _segment_image_from_url(thumb_url)
@@ -148,7 +148,8 @@ def get_sentinel_image(
             cloud_cover=payload_dict["cloud_cover"],
             sentinel_url=sentinel_local_url,
             segmentation_url=segmentation_url,
-            pixel_area_m2=pixel_area_m2,
+            # pixel_area_m2=pixel_area_m2,
+            region_area_m2=region_area_m2,
         ).dict()
         response["created_at"] = datetime.utcnow()
         response["user_id"] = ObjectId(current_user["sub"])
@@ -288,9 +289,9 @@ def get_statistics(
             )
 
         segmentation_url = analysis.get("segmentation_url")
-        pixel_area_m2 = analysis.get("pixel_area_m2")
+        region_area_m2 = analysis.get("region_area_m2")
 
-        if not segmentation_url or not pixel_area_m2:
+        if segmentation_url is None or region_area_m2 is None:
             return JSONResponse(
                 status_code=400,
                 content={
@@ -302,6 +303,7 @@ def get_statistics(
         image_array = decode_segmentation_url(segmentation_url)
         height, width, _ = image_array.shape
         total_pixels = height * width
+        pixel_area_m2 = region_area_m2 / total_pixels
         pixel_area_km2 = float(pixel_area_m2) / 1_000_000.0
 
         class_stats = {}
@@ -328,6 +330,7 @@ def get_statistics(
             "total_pixels": total_pixels,
             "unmatched_pixels": unmatched,
             "pixel_area_m2": pixel_area_m2,
+            "region_area_m2": region_area_m2,
             "classes": class_stats,
         }
         result = statistics_collection.insert_one(statistics_doc)
