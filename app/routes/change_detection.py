@@ -1,5 +1,5 @@
 import calendar
-from datetime import datetime
+from datetime import datetime, timezone
 
 import ee
 import numpy as np
@@ -196,7 +196,7 @@ def change_detection(
 			"dates": date_list,
 			"cloud_cover": payload.cloud_cover,
 			"user_id": ObjectId(current_user["sub"]),
-			"created_at": datetime.utcnow(),
+			"created_at": datetime.now(timezone.utc),
 			"timeline": timeline,
 		}
 		result = timeseries_collection.insert_one(timeseries_doc)

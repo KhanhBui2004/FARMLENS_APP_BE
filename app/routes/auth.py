@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import bcrypt
@@ -55,7 +55,7 @@ async def register_user(user: UserCreate):
 
     user_dict = user.model_dump()
     user_dict["password"] = hash_password(user.password)
-    user_dict["created_at"] = datetime.utcnow()
+    user_dict["created_at"] = datetime.now(timezone.utc)
 
     result = user_collection.insert_one(user_dict)
     user_dict["_id"] = result.inserted_id
@@ -185,7 +185,7 @@ async def reset_password(payload: ResetPasswordRequest):
     hashed_password = hash_password(payload.new_password)
     user_collection.update_one(
         {"_id": user["_id"]},
-        {"$set": {"password": hashed_password, "updated_at": datetime.utcnow()}},
+        {"$set": {"password": hashed_password, "updated_at": datetime.now(timezone.utc)}},
     )
 
     return {

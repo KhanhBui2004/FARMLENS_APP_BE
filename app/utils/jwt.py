@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
@@ -26,7 +26,7 @@ security = HTTPBearer()
 
 
 def create_access_token(subject: str, username: str, email: str) -> str:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     expire = now + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     payload = {
         "sub": subject,
@@ -40,7 +40,7 @@ def create_access_token(subject: str, username: str, email: str) -> str:
 
 
 def create_refresh_token(subject: str) -> str:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     expire = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     payload = {
         "sub": subject,
@@ -52,7 +52,7 @@ def create_refresh_token(subject: str) -> str:
 
 
 def create_password_reset_token(subject: str, email: str) -> str:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": subject,

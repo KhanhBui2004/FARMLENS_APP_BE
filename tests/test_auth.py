@@ -1,5 +1,5 @@
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def test_register_new_user(client):
@@ -27,7 +27,7 @@ def test_login_registered_user(client):
         "username": "loginuser",
         "email": "loginuser@example.com",
         "password": hashed,
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
     })
 
     res = client.post("/auth/login", json={"identifier": "loginuser", "password": "Pwd12345"})

@@ -2,7 +2,7 @@ import calendar
 import os
 import ee 
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -148,10 +148,9 @@ def get_sentinel_image(
             cloud_cover=payload_dict["cloud_cover"],
             sentinel_url=sentinel_local_url,
             segmentation_url=segmentation_url,
-            # pixel_area_m2=pixel_area_m2,
             region_area_m2=region_area_m2,
         ).model_dump()
-        response["created_at"] = datetime.utcnow()
+        response["created_at"] = datetime.now(timezone.utc)
         response["user_id"] = ObjectId(current_user["sub"])
         result = analysis_collection.insert_one(response)
         response["_id"] = result.inserted_id
@@ -325,7 +324,7 @@ def get_statistics(
         statistics_doc = {
             "analysis_id": payload.analysis_id,
             "user_id": ObjectId(current_user["sub"]),
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "image_size": {"width": width, "height": height},
             "total_pixels": total_pixels,
             "unmatched_pixels": unmatched,

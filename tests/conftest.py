@@ -1,7 +1,7 @@
 import os
 import sys
 import types
-from datetime import datetime
+from datetime import datetime, timezone
 from bson import ObjectId
 
 import pytest
@@ -235,7 +235,7 @@ def client(tmp_path_factory, monkeypatch):
         "username": "testuser",
         "email": "test@example.com",
         "password": hashed_empty,
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
     })
 
     # Create storage sentinel image used by segmentation decoder
@@ -259,7 +259,7 @@ def client(tmp_path_factory, monkeypatch):
         "sentinel_url": "/storage/sentinels/test_seg.png",
         "segmentation_url": "/storage/sentinels/test_seg.png",
         "region_area_m2": 1000.0,
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
         "user_id": test_user_id,
     }
     result = fake_analysis.insert_one(analysis_doc)
@@ -269,7 +269,7 @@ def client(tmp_path_factory, monkeypatch):
     statistics_doc = {
         "_id": ObjectId(),
         "analysis_id": str(analysis_id),
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
         "image_size": {"width": 2, "height": 2},
         "total_pixels": 4,
         "unmatched_pixels": 2,
@@ -288,7 +288,7 @@ def client(tmp_path_factory, monkeypatch):
         "dates": ["2023-01-01"],
         "cloud_cover": 10,
         "user_id": test_user_id,
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
         "timeline": [],
     }
     fake_timeseries.insert_one(timeseries_doc)
