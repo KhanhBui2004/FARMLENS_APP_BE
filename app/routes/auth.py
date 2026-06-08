@@ -53,7 +53,7 @@ async def register_user(user: UserCreate):
     if existing_user:
         return error_response(409, "Username or email already exists")
 
-    user_dict = user.dict()
+    user_dict = user.model_dump()
     user_dict["password"] = hash_password(user.password)
     user_dict["created_at"] = datetime.utcnow()
 

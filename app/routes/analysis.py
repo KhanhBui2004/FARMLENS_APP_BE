@@ -102,7 +102,7 @@ def get_sentinel_image(
     current_user: dict = Depends(get_current_user),
 ):
     try:
-        payload_dict = payload.dict()
+        payload_dict = payload.model_dump()
         start_date, end_date = _get_month_range(payload_dict["date"])
         
         # 1. Xác định khu vực (Point)
@@ -150,7 +150,7 @@ def get_sentinel_image(
             segmentation_url=segmentation_url,
             # pixel_area_m2=pixel_area_m2,
             region_area_m2=region_area_m2,
-        ).dict()
+        ).model_dump()
         response["created_at"] = datetime.utcnow()
         response["user_id"] = ObjectId(current_user["sub"])
         result = analysis_collection.insert_one(response)
