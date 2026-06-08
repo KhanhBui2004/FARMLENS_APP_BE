@@ -32,7 +32,7 @@ def test_delete_all_segmentations(client):
     assert "deleted" in body2
 
 
-def test_statistics_endpoint(client):
+def test_post_statistics(client):
     analysis_id = str(client.analysis_id)
     res = client.post("/analysis/statistics", json={"analysis_id": analysis_id})
     body = res.json()
