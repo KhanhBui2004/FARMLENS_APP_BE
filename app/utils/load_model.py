@@ -8,19 +8,20 @@ import torch
 import segmentation_models_pytorch as smp
 
 # ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-MODEL_PATH = ("unet_mobilenet_v2_smp_best.pth")
-MODEL_INPUT_SIZE = (512, 512)
+MODEL_PATH = ("unet_resnet50_imagenet_exp_best.pth")
+MODEL_INPUT_SIZE = (1024, 1024)
 NUM_CLASSES = 7
+
 SEGMENTATIONS_DIR = "storage/segmentations"
 
 CLASS_COLORS = [
-    [255, 255, 0],
-    [232, 184, 153],
-    [0, 255, 0],
-    [255, 0, 255],
-    [0, 0, 0],
-    [0, 255, 255],
-    [0, 0, 255],
+    [255, 215, 0],    # Agriculture - vàng lúa
+    [181, 101, 29],   # Barren - nâu đất
+    [34, 139, 34],    # Forest - xanh rừng
+    [154, 205, 50],   # Rangeland - xanh vàng nhạt
+    [0, 0, 0],        # Unknown
+    [220, 20, 60],    # Urban - đỏ đô thị
+    [30, 144, 255],   # Water - xanh nước
 ]
 
 def _label_to_rgb(mask: np.ndarray) -> np.ndarray:
@@ -41,23 +42,30 @@ def _clean_state_dict(state_dict: dict) -> dict:
         cleaned[key] = value
     return cleaned
 
-
 def _load_model() -> torch.nn.Module:
     model = smp.Unet(
-        encoder_name="mobilenet_v2",
-        encoder_weights=None,
+        encoder_name="resnet50",
+        encoder_weights=None,   # không load ImageNet lần nữa
         in_channels=3,
         classes=NUM_CLASSES,
-        activation=None
+        activation=None,
     )
-    state = torch.load(MODEL_PATH, map_location="cpu")
-    if isinstance(state, dict):
-        if "model_state_dict" in state:
-            state = state["model_state_dict"]
-        elif "state_dict" in state:
-            state = state["state_dict"]
-    model.load_state_dict(_clean_state_dict(state), strict=True)
+
+    checkpoint = torch.load(MODEL_PATH, map_location="cpu")
+
+    if isinstance(checkpoint, dict):
+        if "model_state_dict" in checkpoint:
+            state_dict = checkpoint["model_state_dict"]
+        elif "state_dict" in checkpoint:
+            state_dict = checkpoint["state_dict"]
+        else:
+            state_dict = checkpoint
+    else:
+        state_dict = checkpoint
+
+    model.load_state_dict(_clean_state_dict(state_dict), strict=True)
     model.eval()
+
     return model
 
 
