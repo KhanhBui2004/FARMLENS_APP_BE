@@ -47,14 +47,15 @@ CLASS_LABELS = [
     "water",
 ]
 
+
 CLASS_COLORS = [
-    [255, 215, 0],    # Agriculture - vàng lúa
-    [181, 101, 29],   # Barren - nâu đất
-    [34, 139, 34],    # Forest - xanh rừng
-    [154, 205, 50],   # Rangeland - xanh vàng nhạt
+    [255, 255, 100],  # Agriculture
+    [210, 180, 140],  # Barren
+    [0, 100, 0],      # Forest
+    [124, 252, 0],    # Rangeland
     [0, 0, 0],        # Unknown
-    [220, 20, 60],    # Urban - đỏ đô thị
-    [30, 144, 255],   # Water - xanh nước
+    [178, 34, 34],    # Urban
+    [65, 105, 225],   # Water
 ]
 
 def _get_month_range(date_str: str) -> tuple[str, str]:
