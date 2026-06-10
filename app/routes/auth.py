@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import bcrypt
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from bson import ObjectId
 
@@ -12,7 +12,8 @@ from app.models.users_model import (
     RefreshRequest,
     ResetPasswordRequest,
     UserCreate,
-    UserLogin
+    UserLogin,
+    UserUpdate
 )
 from app.config.database import user_collection
 from app.schema.user_schema import user_serial
@@ -21,6 +22,7 @@ from app.utils.jwt import (
     create_password_reset_token,
     create_refresh_token,
     decode_token,
+    get_current_user,
     is_jwt_error
 )
 
@@ -92,6 +94,52 @@ async def login_user(login: UserLogin):
         "token_type": "bearer"
     }
 
+@router.patch("/profile")
+async def update_profile(
+    user_update: UserUpdate,
+    current_user: dict = Depends(get_current_user), 
+):
+    updated_data = {}
+    if user_update.full_name is not None:
+        updated_data["fullname"] = user_update.full_name
+    if user_update.email is not None:
+        updated_data["email"] = user_update.email
+    if user_update.username is not None:
+        updated_data["username"] = user_update.username
+    if user_update.password is not None:
+        updated_data["password"] = hash_password(user_update.password)
+
+    if not updated_data:
+        return error_response(400, "No data provided for update")
+    
+    user_id = ObjectId(current_user["sub"])
+
+    if "email" in updated_data:
+        existing_user = user_collection.find_one(
+            {"email": updated_data["email"], "_id": {"$ne": user_id}}
+        )
+        if existing_user:
+            return error_response(409, "Email already in use")
+    
+    if "username" in updated_data:
+        existing_user = user_collection.find_one(
+            {"username": updated_data["username"], "_id": {"$ne": user_id}}
+        )
+        if existing_user:
+            return error_response(409, "Username already in use")
+        
+    updated_data["updated_at"] = datetime.now(timezone.utc)
+
+    result = user_collection.update_one(
+        {"_id": user_id},
+        {"$set": updated_data}
+    )
+    if result.matched_count == 0:
+        return error_response(404, "User not found")
+    return {
+        "code": 200,
+        "message": "Profile updated successfully",
+    }
 
 @router.post("/refresh")
 async def refresh_token(payload: RefreshRequest):
