@@ -139,6 +139,7 @@ async def update_profile(
     return {
         "code": 200,
         "message": "Profile updated successfully",
+        "user": user_serial(user_collection.find_one({"_id": user_id}))
     }
 
 @router.post("/refresh")
