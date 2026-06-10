@@ -5,8 +5,6 @@ __pycache__/
 
 gee_key.json
 
-unet_mobilenet_v2_smp_best.pth
-
 unet_resnet50_imagenet_exp_best.pth
 
 mask.py
