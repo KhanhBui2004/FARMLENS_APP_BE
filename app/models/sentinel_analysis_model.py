@@ -6,7 +6,7 @@ class SentinelAnalysisRequest(BaseModel):
     lat: float = 16.0544
     lng: float = 108.2022
     date: str = "2023-01-01"  # Dinh dang 'YYYY-MM-DD'
-    cloud_cover: float = 5.0  # Muc do may toi da (%)
+    cloud_cover: float = 20.0  # Muc do may toi da (%)
 
 
 class SentinelAnalysisResponse(BaseModel):

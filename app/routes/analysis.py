@@ -116,6 +116,24 @@ def get_sentinel_image(
                       .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', payload_dict["cloud_cover"]))
                       .sort('CLOUDY_PIXEL_PERCENTAGE'))
 
+        image_count = collection.size().getInfo()
+        print("lat:", payload_dict["lat"])
+        print("lng:", payload_dict["lng"])
+        print("date:", payload_dict["date"])
+        print("start_date:", start_date)
+        print("end_date:", end_date)
+        print("cloud_cover:", payload_dict["cloud_cover"])
+        print("image_count:", image_count)
+
+        if image_count == 0:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "code": 404,
+                    "message": "No Sentinel image found. Try increasing cloud_cover or changing date.",
+                },
+            )
+        
         # 3. Lấy ảnh tốt nhất
         image = collection.median()
 

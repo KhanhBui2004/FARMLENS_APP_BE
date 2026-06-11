@@ -30,13 +30,13 @@ CLASS_LABELS = [
 ]
 
 CLASS_COLORS = [
-	[255, 255, 0],
-	[232, 184, 153],
-	[0, 255, 0],
-	[255, 0, 255],
-	[0, 0, 0],
-	[0, 255, 255],
-	[0, 0, 255],
+    [255, 255, 100],  # Agriculture
+    [210, 180, 140],  # Barren
+    [0, 100, 0],      # Forest
+    [124, 252, 0],    # Rangeland
+    [0, 0, 0],        # Unknown
+    [178, 34, 34],    # Urban
+    [65, 105, 225],   # Water
 ]
 
 def _get_month_range(date_str: str) -> tuple[str, str]:
@@ -128,6 +128,14 @@ def change_detection(
 						  .sort("CLOUDY_PIXEL_PERCENTAGE"))
 
 			image = collection.median()
+
+			print("lat:", payload.lat)
+			print("lng:", payload.lng)
+			print("date_str:", date_str)
+			print("start_date:", start_date)
+			print("end_date:", end_date)
+			print("cloud_cover:", payload.cloud_cover)
+			print("image_count:", collection.size().getInfo())
 			
 			vis_params = {
 				"bands": ["B4", "B3", "B2"],
@@ -146,7 +154,9 @@ def change_detection(
 
 			region_area_m2 = get_region_area_m2(region)
 			segmentation_url = _segment_image_from_url(thumb_url)
+			print('Segmentation URL:', segmentation_url)
 			image_array = decode_segmentation_url(segmentation_url)
+			print('Decoded image shape:', image_array.shape)
 
 			height, width, _ = image_array.shape
 			total_pixels = height * width
