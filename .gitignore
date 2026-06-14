@@ -5,8 +5,10 @@ __pycache__/
 
 gee_key.json
 
-unet_resnet50_imagenet_exp_best.pth
+model/unet_resnet50_imagenet_exp_best.pth
 
 mask.py
 
 storage/**/*
+
+model/unet_efficientnet_b5.pth

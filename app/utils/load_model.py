@@ -8,7 +8,7 @@ import torch
 import segmentation_models_pytorch as smp
 
 # ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-MODEL_PATH = ("unet_resnet50_imagenet_exp_best.pth")
+MODEL_PATH = ("model/unet_efficientnet_b5.pth")
 MODEL_INPUT_SIZE = (1024, 1024)
 NUM_CLASSES = 7
 
@@ -44,7 +44,7 @@ def _clean_state_dict(state_dict: dict) -> dict:
 
 def _load_model() -> torch.nn.Module:
     model = smp.Unet(
-        encoder_name="resnet50",
+        encoder_name="efficientnet-b5",
         encoder_weights=None,   # không load ImageNet lần nữa
         in_channels=3,
         classes=NUM_CLASSES,
