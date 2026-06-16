@@ -47,32 +47,43 @@ def build_farmland_tracking(
 def detect_abnormality(
     farmland_tracking: dict[str, float],
 ) -> dict[str, Any]:
-    agri_relative_change = farmland_tracking["agriculture_relative_change_percentage"]
-    agri_points_change = farmland_tracking["agriculture_change_percentage_points"]
+    relative_change = farmland_tracking["agriculture_relative_change_percentage"]
+    point_change = farmland_tracking["agriculture_change_percentage_points"]
 
-    level = "low"
+    status = "stable"
+    label = "Stable"
     priority_check = False
     reason = "Khu vực tương đối ổn định."
 
-    if agri_relative_change <= -10 or agri_points_change <= -8:
-        level = "high"
+    # Giảm mạnh -> cần kiểm tra thực địa
+    if relative_change <= -10 or point_change <= -8:
+        status = "field_check"
+        label = "Field check recommended"
         priority_check = True
-        reason = "Diện tích đất nông nghiệp giảm đáng kể."
-    elif agri_relative_change <= -5 or agri_points_change <= -4:
-        level = "medium"
-        priority_check = True
-        reason = "Diện tích đất nông nghiệp có xu hướng giảm."
-    elif agri_relative_change >= 8:
-        level = "medium"
+        reason = "Diện tích đất nông nghiệp giảm mạnh, cần kiểm tra thực địa."
+
+    # Giảm nhẹ hoặc tăng đáng kể -> theo dõi thêm
+    elif relative_change <= -3 or point_change <= -3:
+        status = "monitor"
+        label = "Monitor periodically"
         priority_check = False
-        reason = "Diện tích đất nông nghiệp tăng đáng kể."
-    else:
-        level = "low"
+        reason = "Diện tích đất nông nghiệp có xu hướng giảm, nên theo dõi thêm."
+
+    elif relative_change >= 10 or point_change >= 8:
+        status = "monitor"
+        label = "Noticeable change"
         priority_check = False
-        reason = "Biến động đất nông nghiệp chưa đáng kể."
+        reason = "Diện tích đất nông nghiệp tăng đáng kể, nên theo dõi thêm để xác nhận xu hướng."
+
+    elif relative_change >= 3 or point_change >= 3:
+        status = "monitor"
+        label = "Monitor periodically"
+        priority_check = False
+        reason = "Diện tích đất nông nghiệp có biến động, nên tiếp tục theo dõi."
 
     return {
-        "level": level,
+        "status": status,
+        "label": label,
         "priority_check": priority_check,
         "reason": reason,
     }
@@ -84,31 +95,36 @@ def generate_recommendation(
 ) -> dict[str, Any]:
     current_percentage = farmland_tracking["current_agriculture_percentage"]
     relative_change = farmland_tracking["agriculture_relative_change_percentage"]
+    status = abnormality["status"]
 
     actions: list[str] = []
-    summary = "Khu vực ổn định, có thể tiếp tục theo dõi định kỳ."
-    status = "stable"
 
-    if current_percentage >= 50:
-        actions.append("Khu vực hiện vẫn có đặc trưng đất canh tác rõ rệt.")
-    elif current_percentage >= 25:
-        actions.append("Đất canh tác vẫn hiện diện nhưng không chiếm ưu thế.")
-    else:
-        actions.append("Tỷ lệ đất canh tác đang ở mức thấp trong khu vực phân tích.")
-
-    if abnormality["priority_check"]:
-        status = "need_field_check"
-        summary = "Có dấu hiệu biến động đáng chú ý. Nên kiểm tra thực địa."
+    if status == "field_check":
+        summary = "Đất canh tác giảm đáng kể. Nên kiểm tra thực địa để xác định nguyên nhân biến động."
         actions.append("Ưu tiên kiểm tra thực địa khu vực này.")
-        actions.append("Thực hiện phân tích lại ở kỳ tiếp theo để xác nhận xu hướng.")
-    elif relative_change <= -3:
-        status = "monitor_closely"
-        summary = "Đất canh tác có xu hướng giảm. Nên theo dõi thêm."
-        actions.append("Tăng tần suất theo dõi trong các kỳ tiếp theo.")
+        actions.append("Đối chiếu thêm với tình hình sử dụng đất thực tế.")
+        actions.append("Phân tích lại ở kỳ tiếp theo để xác nhận xu hướng.")
+
+    elif status == "monitor":
+        if relative_change > 0:
+            summary = "Diện tích đất canh tác tăng đáng kể. Nên theo dõi thêm để xác nhận đây là xu hướng ổn định."
+            actions.append("Tiếp tục theo dõi trong các kỳ tiếp theo.")
+            actions.append("Đánh giá xem biến động có lặp lại theo thời gian hay không.")
+        else:
+            summary = "Đất canh tác có biến động giảm. Nên tăng tần suất theo dõi trong các kỳ tiếp theo."
+            actions.append("Theo dõi thêm trong các kỳ tiếp theo.")
+            actions.append("Chuẩn bị kiểm tra thực địa nếu xu hướng giảm tiếp tục.")
+
     else:
-        status = "stable"
         summary = "Khu vực tương đối ổn định, có thể tiếp tục sản xuất và theo dõi định kỳ."
         actions.append("Duy trì theo dõi định kỳ.")
+
+    if current_percentage >= 50:
+        actions.insert(0, "Khu vực hiện vẫn có đặc trưng đất canh tác rõ rệt.")
+    elif current_percentage >= 25:
+        actions.insert(0, "Đất canh tác vẫn hiện diện nhưng không chiếm ưu thế.")
+    else:
+        actions.insert(0, "Tỷ lệ đất canh tác hiện đang ở mức thấp trong khu vực phân tích.")
 
     return {
         "status": status,
