@@ -51,33 +51,33 @@ def detect_abnormality(
     point_change = farmland_tracking["agriculture_change_percentage_points"]
 
     status = "stable"
-    label = "Stable"
+    label = "Ổn định"
     priority_check = False
     reason = "Khu vực tương đối ổn định."
 
     # Giảm mạnh -> cần kiểm tra thực địa
     if relative_change <= -10 or point_change <= -8:
         status = "field_check"
-        label = "Field check recommended"
+        label = "Cần kiểm tra thực địa"
         priority_check = True
         reason = "Diện tích đất nông nghiệp giảm mạnh, cần kiểm tra thực địa."
 
     # Giảm nhẹ hoặc tăng đáng kể -> theo dõi thêm
     elif relative_change <= -3 or point_change <= -3:
         status = "monitor"
-        label = "Monitor periodically"
+        label = "Cần theo dõi thêm"
         priority_check = False
         reason = "Diện tích đất nông nghiệp có xu hướng giảm, nên theo dõi thêm."
 
     elif relative_change >= 10 or point_change >= 8:
         status = "monitor"
-        label = "Noticeable change"
+        label = "Biến động đáng chú ý"
         priority_check = False
         reason = "Diện tích đất nông nghiệp tăng đáng kể, nên theo dõi thêm để xác nhận xu hướng."
 
     elif relative_change >= 3 or point_change >= 3:
         status = "monitor"
-        label = "Monitor periodically"
+        label = "Theo dõi định kỳ"
         priority_check = False
         reason = "Diện tích đất nông nghiệp có biến động, nên tiếp tục theo dõi."
 
