@@ -14,6 +14,12 @@ from app.utils.load_model import _segment_image_from_url
 from app.utils.segmentation import decode_segmentation_url
 from app.utils.jwt import get_current_user
 
+from app.utils.decision_support import (
+    build_farmland_tracking,
+    detect_abnormality,
+    generate_recommendation,
+)
+
 from app.config.database import timeseries_collection
 
 
@@ -78,153 +84,163 @@ def get_change_detection_history(current_user: dict = Depends(get_current_user),
 
 @router.post("/change-detection")
 def change_detection(
-	payload: ChangeDetectionRequest,
-	current_user: dict = Depends(get_current_user),
+    payload: ChangeDetectionRequest,
+    current_user: dict = Depends(get_current_user),
 ):
-	try:
-		if not payload.date1 or not payload.date2:
-			return JSONResponse(
-				status_code=400,
-				content={
-					"code": 400,
-					"message": "date1 and date2 are required",
-				},
-			)
+    try:
+        if not payload.date1 or not payload.date2:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "code": 400,
+                    "message": "date1 and date2 are required",
+                },
+            )
 
-		try:
-			point = ee.Geometry.Point([payload.lng, payload.lat])
-		except Exception:
-			return JSONResponse(
-				status_code=400,
-				content={
-					"code": 400,
-					"message": "Invalid coordinates",
-				},
-			)
-		date_list = [payload.date1, payload.date2]
-		date1 = datetime.strptime(payload.date1, "%Y-%m-%d")
-		date2 = datetime.strptime(payload.date2, "%Y-%m-%d")
+        try:
+            point = ee.Geometry.Point([payload.lng, payload.lat])
+        except Exception:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "code": 400,
+                    "message": "Invalid coordinates",
+                },
+            )
 
-		if date1 > date2:
-			date_list = [payload.date2, payload.date1]
-		
-		timeline = []
-		for date_str in date_list:
-			try:
-				start_date, end_date = _get_month_range(date_str)
-			except ValueError:
-				return JSONResponse(
-					status_code=400,
-					content={
-						"code": 400,
-						"message": f"Invalid date format: {date_str}",
-					},
-				)
+        date_list = [payload.date1, payload.date2]
+        date1 = datetime.strptime(payload.date1, "%Y-%m-%d")
+        date2 = datetime.strptime(payload.date2, "%Y-%m-%d")
 
-			collection = (ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-						  .filterBounds(point)
-						  .filterDate(start_date, end_date)
-						  .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", payload.cloud_cover))
-						  .sort("CLOUDY_PIXEL_PERCENTAGE"))
+        if date1 > date2:
+            date_list = [payload.date2, payload.date1]
 
-			image = collection.median()
+        region = point.buffer(2000).bounds()
+        timeline = []
 
-			print("lat:", payload.lat)
-			print("lng:", payload.lng)
-			print("date_str:", date_str)
-			print("start_date:", start_date)
-			print("end_date:", end_date)
-			print("cloud_cover:", payload.cloud_cover)
-			print("image_count:", collection.size().getInfo())
-			
-			vis_params = {
-				"bands": ["B4", "B3", "B2"],
-				"min": 0,
-				"max": 3000,
-				"gamma": 1.4,
-			}
+        for date_str in date_list:
+            try:
+                start_date, end_date = _get_month_range(date_str)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "code": 400,
+                        "message": f"Invalid date format: {date_str}",
+                    },
+                )
 
-			region = point.buffer(2000).bounds()
-			thumb_url = image.getThumbURL({
-				"dimensions": 1024,
-				"region": region,
-				"format": "png",
-				**vis_params,
-			})
+            collection = (
+                ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+                .filterBounds(region)
+                .filterDate(start_date, end_date)
+                .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", payload.cloud_cover))
+            )
 
-			region_area_m2 = get_region_area_m2(region)
-			segmentation_url = _segment_image_from_url(thumb_url)
-			print('Segmentation URL:', segmentation_url)
-			image_array = decode_segmentation_url(segmentation_url)
-			print('Decoded image shape:', image_array.shape)
+            image_count = collection.size().getInfo()
+            if image_count == 0:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "code": 404,
+                        "message": f"No Sentinel image found for date {date_str}",
+                    },
+                )
 
-			height, width, _ = image_array.shape
-			total_pixels = height * width
+            image = collection.median().clip(region)
 
-			if total_pixels == 0:
-				return JSONResponse(
-        			status_code=500,
-        			content={
-            		"code": 500,
-            		"message": "Segmentation image has no pixels",
-        			},
-    			)
+            vis_params = {
+                "bands": ["B4", "B3", "B2"],
+                "min": 0,
+                "max": 3000,
+                "gamma": 1.4,
+            }
 
-			pixel_area_m2 = region_area_m2 / total_pixels
-			pixel_area_km2 = float(pixel_area_m2) / 1_000_000.0
+            thumb_url = image.getThumbURL({
+                "dimensions": 1024,
+                "region": region,
+                "format": "png",
+                **vis_params,
+            })
 
-			class_stats = {}
-			for label, color in zip(CLASS_LABELS, CLASS_COLORS):
-				color_array = np.array(color, dtype=np.uint8)
-				mask = np.all(image_array == color_array, axis=-1)
-				count = int(mask.sum())
-				area_km2 = count * pixel_area_km2
+            region_area_m2 = get_region_area_m2(region)
+            segmentation_url = _segment_image_from_url(thumb_url)
+            image_array = decode_segmentation_url(segmentation_url)
 
-				percentage = (count / total_pixels * 100.0) if total_pixels else 0.0
+            height, width, _ = image_array.shape
+            total_pixels = height * width
 
-				class_stats[label] = {
-					"pixel_count": count,
-					"area_km2": round(area_km2, 6),
-					"percentage": round(percentage, 4),
-				}
+            if total_pixels == 0:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "code": 500,
+                        "message": "Segmentation image has no pixels",
+                    },
+                )
 
-			timeline.append({
-				"date": end_date,
-    			"image_size": {
-        			"width": width,
-        			"height": height,
-    			},
-    			"total_pixels": total_pixels,
-    			"region_area_m2": region_area_m2,
-    			"pixel_area_m2": pixel_area_m2,
-    			"classes": class_stats,
-			})
+            pixel_area_m2 = region_area_m2 / total_pixels
+            pixel_area_km2 = float(pixel_area_m2) / 1_000_000.0
 
-		timeseries_doc = {
-			"lat": payload.lat,
-			"lng": payload.lng,
-			"dates": date_list,
-			"cloud_cover": payload.cloud_cover,
-			"user_id": ObjectId(current_user["sub"]),
-			"created_at": datetime.now(timezone.utc),
-			"timeline": timeline,
-		}
-		result = timeseries_collection.insert_one(timeseries_doc)
-		timeseries_doc["_id"] = result.inserted_id
+            class_stats = {}
+            for label, color in zip(CLASS_LABELS, CLASS_COLORS):
+                color_array = np.array(color, dtype=np.uint8)
+                mask = np.all(image_array == color_array, axis=-1)
+                count = int(mask.sum())
+                area_km2 = count * pixel_area_km2
+                percentage = (count / total_pixels * 100.0) if total_pixels else 0.0
 
-		return {
-			"code": 200,
-			"message": "Change detection results retrieved successfully",
-			"data": change_detection_serial(timeseries_doc),
-		}
-	except Exception as e:
-		return JSONResponse(
-			status_code=500,
-			content={
-				"code": 500,
-				"message": str(e),
-			},
-		)
+                class_stats[label] = {
+                    "pixel_count": count,
+                    "area_km2": round(area_km2, 6),
+                    "percentage": round(percentage, 4),
+                }
+
+            timeline.append({
+                "date": end_date,
+                "image_size": {
+                    "width": width,
+                    "height": height,
+                },
+                "total_pixels": total_pixels,
+                "region_area_m2": region_area_m2,
+                "pixel_area_m2": pixel_area_m2,
+                "classes": class_stats,
+            })
+
+        farmland_tracking = build_farmland_tracking(timeline[0], timeline[1])
+        abnormality = detect_abnormality(farmland_tracking)
+        recommendation = generate_recommendation(farmland_tracking, abnormality)
+
+        timeseries_doc = {
+            "lat": payload.lat,
+            "lng": payload.lng,
+            "dates": date_list,
+            "cloud_cover": payload.cloud_cover,
+            "user_id": ObjectId(current_user["sub"]),
+            "created_at": datetime.now(timezone.utc),
+            "timeline": timeline,
+            "farmland_tracking": farmland_tracking,
+            "abnormality": abnormality,
+            "recommendation": recommendation,
+        }
+
+        result = timeseries_collection.insert_one(timeseries_doc)
+        timeseries_doc["_id"] = result.inserted_id
+
+        return {
+            "code": 200,
+            "message": "Change detection results retrieved successfully",
+            "data": change_detection_serial(timeseries_doc),
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "code": 500,
+                "message": str(e),
+            },
+        )
 
 
 @router.delete("/change-detection")

@@ -198,7 +198,7 @@ def client(tmp_path_factory, monkeypatch):
 
     # Also patch the already-imported names in route modules
     import app.routes.auth as auth_mod
-    import app.routes.analysis as analysis_mod
+    import app.routes.segmentationi_analysis as analysis_mod
     import app.routes.change_detection as cd_mod
 
     monkeypatch.setattr(auth_mod, "user_collection", fake_user)

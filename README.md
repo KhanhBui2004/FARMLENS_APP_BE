@@ -51,6 +51,92 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 GEE_SERVICE_ACCOUNT=your-service-account@your-project.iam.gserviceaccount.com
 ```
 
+## Training AI Model
+
+The training notebook is available at:
+
+```text
+model/unet_model.ipynb
+```
+
+This notebook is used to prepare the DeepGlobe dataset, train the U-Net model on Kaggle, and export the final checkpoint for backend inference.
+
+### Dataset Split (70/20/10)
+
+The DeepGlobe dataset should be split into:
+
+- **70%** training set
+- **20%** validation set
+- **10%** test set
+
+Recommended directory structure:
+
+```text
+dataset/
+  train/
+    img/
+    ann/
+  val/
+    img/
+    ann/
+  test/
+    img/
+    ann/
+```
+
+Make sure each image file matches its corresponding mask file.
+
+### Training on Kaggle
+
+1. Upload the project folder or notebook to Kaggle.
+2. Upload the DeepGlobe dataset to Kaggle as a Dataset, or mount it from Kaggle input storage.
+3. In the notebook, update dataset paths so they point to the Kaggle input directory.
+
+Example:
+
+```python
+DATASET_DIR = "/kaggle/input/deepglobe-split/dataset"
+TRAIN_IMG_DIR = f"{DATASET_DIR}/train/img"
+TRAIN_MASK_DIR = f"{DATASET_DIR}/train/ann"
+VAL_IMG_DIR = f"{DATASET_DIR}/val/img"
+VAL_MASK_DIR = f"{DATASET_DIR}/val/ann"
+TEST_IMG_DIR = f"{DATASET_DIR}/test/img"
+TEST_MASK_DIR = f"{DATASET_DIR}/test/ann"
+```
+
+4. Enable **GPU** in Kaggle Notebook before training.
+5. Run all cells in `model/unet_model.ipynb`.
+
+### Model Output
+
+After training, save the final model checkpoint with the following name:
+
+```text
+unet_efficientnet_b5.pth
+```
+
+Example save path in Kaggle working directory:
+
+```python
+torch.save(model.state_dict(), "/kaggle/working/unet_efficientnet_b5.pth")
+```
+
+### Copy Model Back to Project
+
+After training finishes, download the exported checkpoint from Kaggle and place it in the project folder:
+
+```text
+model/unet_efficientnet_b5.pth
+```
+
+This file will be used by the backend for inference.
+
+### Notes
+
+- The notebook already contains the main training pipeline.
+- Only the dataset path and output checkpoint path need to be adjusted for Kaggle.
+- Ensure the backend model path matches the exported checkpoint name before running the API.
+
 ## Google Earth Engine (GEE) - Optional
 
 To enable Sentinel-2 imagery retrieval via Earth Engine:
