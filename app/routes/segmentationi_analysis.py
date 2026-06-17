@@ -18,6 +18,7 @@ from app.utils.load_model import _segment_image_from_url
 from app.utils.segmentation import _download_sentinel_image, decode_segmentation_url
 from app.utils.gee import get_pixel_area_m2, get_region_area_m2
 from app.utils.jwt import get_current_user
+from app.utils.current_area_assessment import evaluate_current_area
 
 
 # Khởi tạo Earth Engine
@@ -340,6 +341,9 @@ def get_statistics(
             }
 
         unmatched = total_pixels - matched_pixels
+
+        current_area_assessment = evaluate_current_area(class_stats)
+
         statistics_doc = {
             "analysis_id": payload.analysis_id,
             "user_id": ObjectId(current_user["sub"]),
@@ -350,13 +354,14 @@ def get_statistics(
             "pixel_area_m2": pixel_area_m2,
             "region_area_m2": region_area_m2,
             "classes": class_stats,
+            "current_area_assessment": current_area_assessment,
         }
         result = statistics_collection.insert_one(statistics_doc)
         statistics_doc["_id"] = result.inserted_id
         return {
             "code": 200,
             "message": "Statistics retrieved successfully",
-            "data": statistic_serial(statistics_doc)
+            "data": statistic_serial(statistics_doc),
         }
     except Exception as e:
         return JSONResponse(

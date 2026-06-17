@@ -210,7 +210,13 @@ def change_detection(
 
         farmland_tracking = build_farmland_tracking(timeline[0], timeline[1])
         abnormality = detect_abnormality(farmland_tracking)
-        recommendation = generate_recommendation(farmland_tracking, abnormality)
+        # recommendation = generate_recommendation(farmland_tracking, abnormality)
+        recommendation = generate_recommendation(
+            farmland_tracking,
+            abnormality,
+            timeline[0],
+            timeline[1],
+        )
 
         timeseries_doc = {
             "lat": payload.lat,

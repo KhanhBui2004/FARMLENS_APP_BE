@@ -27,4 +27,5 @@ def statistic_serial(statistics) -> dict:
         "region_area_m2": statistics.get("region_area_m2"),
         "pixel_area_m2": statistics.get("pixel_area_m2"),
         "classes": statistics.get("classes"),
+        "current_area_assessment": statistics.get("current_area_assessment", {}),
     }
