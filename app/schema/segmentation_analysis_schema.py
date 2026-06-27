@@ -7,6 +7,7 @@ def sentinel_serial(analysis) -> dict:
         "date": analysis.get("date"),
         "cloud_cover": analysis.get("cloud_cover"),
         "region_area_m2": analysis.get("region_area_m2"),
+        "region_bounds": analysis.get("region_bounds"),
         "sentinel_url": analysis.get("sentinel_url"),
         "segmentation_url": analysis.get("segmentation_url"),
     }
@@ -27,5 +28,6 @@ def statistic_serial(statistics) -> dict:
         "region_area_m2": statistics.get("region_area_m2"),
         "pixel_area_m2": statistics.get("pixel_area_m2"),
         "classes": statistics.get("classes"),
+        "survey_region": statistics.get("survey_region"),
         "current_area_assessment": statistics.get("current_area_assessment", {}),
     }

@@ -15,7 +15,7 @@ from app.models.sentinel_analysis_model import (
 from app.schema import sentinel_serial, statistic_serial
 from app.config.database import analysis_collection, statistics_collection
 from app.utils.load_model import _segment_image_from_url
-from app.utils.segmentation import _download_sentinel_image, decode_segmentation_url
+from app.utils.segmentation import _download_sentinel_image, decode_segmentation_url, build_largest_agriculture_survey_region
 from app.utils.gee import get_pixel_area_m2, get_region_area_m2
 from app.utils.jwt import get_current_user
 from app.utils.current_area_assessment import evaluate_current_area
@@ -74,6 +74,18 @@ def _get_month_range(date_str: str) -> tuple[str, str]:
     )
     return start_date.isoformat(), end_date.isoformat()
 
+def _get_region_bounds(region) -> dict[str, float]:
+    coords = region.bounds().coordinates().getInfo()[0]
+
+    lngs = [point[0] for point in coords]
+    lats = [point[1] for point in coords]
+
+    return {
+        "west": min(lngs),
+        "south": min(lats),
+        "east": max(lngs),
+        "north": max(lats),
+    }
 
 @router.get("/segmentation")
 def get_segmentation_history(
@@ -115,16 +127,10 @@ def get_sentinel_image(
                       .filterBounds(point)
                       .filterDate(start_date, end_date)
                       .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', payload_dict["cloud_cover"]))
-                      .sort('CLOUDY_PIXEL_PERCENTAGE'))
+                    #   .sort('CLOUDY_PIXEL_PERCENTAGE')
+                      )
 
         image_count = collection.size().getInfo()
-        print("lat:", payload_dict["lat"])
-        print("lng:", payload_dict["lng"])
-        print("date:", payload_dict["date"])
-        print("start_date:", start_date)
-        print("end_date:", end_date)
-        print("cloud_cover:", payload_dict["cloud_cover"])
-        print("image_count:", image_count)
 
         if image_count == 0:
             return JSONResponse(
@@ -149,6 +155,9 @@ def get_sentinel_image(
         # 5. Tạo URL thumbnail
         # region_image = image.visualize(**vis_params) # Optional: visual
         region = point.buffer(2000).bounds()
+
+        region_bounds = _get_region_bounds(region)
+
         thumb_url = image.getThumbURL({
             'dimensions': 1024,
             'region': region, # 10km quanh điểm
@@ -169,7 +178,9 @@ def get_sentinel_image(
             sentinel_url=sentinel_local_url,
             segmentation_url=segmentation_url,
             region_area_m2=region_area_m2,
+            region_bounds=region_bounds,
         ).model_dump()
+
         response["created_at"] = datetime.now(timezone.utc)
         response["user_id"] = ObjectId(current_user["sub"])
         result = analysis_collection.insert_one(response)
@@ -325,6 +336,12 @@ def get_statistics(
         pixel_area_m2 = region_area_m2 / total_pixels
         pixel_area_km2 = float(pixel_area_m2) / 1_000_000.0
 
+        survey_region = build_largest_agriculture_survey_region(
+            image_array=image_array,
+            pixel_area_km2=pixel_area_km2,
+            region_bounds=analysis.get("region_bounds"),
+        )
+
         class_stats = {}
         matched_pixels = 0
         for label, color in zip(CLASS_LABELS, CLASS_COLORS):
@@ -354,6 +371,7 @@ def get_statistics(
             "pixel_area_m2": pixel_area_m2,
             "region_area_m2": region_area_m2,
             "classes": class_stats,
+            "survey_region": survey_region,
             "current_area_assessment": current_area_assessment,
         }
         result = statistics_collection.insert_one(statistics_doc)

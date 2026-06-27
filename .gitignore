@@ -12,8 +12,3 @@ mask.py
 storage/**/*
 
 model/unet_efficientnet_b5.pth
-
-app/utils/ndvi.py
-app/schema/ndvi_schema.py
-app/models/ndvi_analysis_model.py
-app/routes/ndvi_analysis.py
